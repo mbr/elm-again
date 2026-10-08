@@ -7,12 +7,20 @@ module Again.Policy exposing (Policy(..), delay)
 -}
 
 
-{-| Retry delays in milliseconds. `Periodic` uses a fixed delay;
-`ExponentialBackoff` grows from `initialDelay` by `multiplier`, capped at
-`maxDelay`. `ImmediatelyThen` prepends a zero delay to another policy.
+{-| Choose how long to wait before each retry. All delays are in milliseconds.
 
-Supply finite, nonnegative delays, a finite multiplier of at least one, and a
-maximum no smaller than the initial delay. Parameters are not validated.
+`Periodic` uses the same `delay` for every retry.
+
+`ExponentialBackoff` starts with `initialDelay`, then multiplies the delay by
+`multiplier` for each subsequent retry, up to `maxDelay`.
+
+`ImmediatelyThen` retries once without waiting, then follows the wrapped policy
+from its first delay. Wrap it around either of the other variants, or nest it
+for several immediate retries.
+
+Choose a `multiplier` of one or more and delays of zero or more, with
+`maxDelay` at least as large as `initialDelay`. The policy uses your values
+as given, so make sure they're finite numbers.
 
 -}
 type Policy
@@ -25,8 +33,7 @@ type Policy
     | ImmediatelyThen Policy
 
 
-{-| Returns a delay for a nonnegative, zero-based retry index. Partially apply a
-policy to obtain an `Int -> Float` delay function.
+{-| Returns a delay for a nonnegative, zero-based retry index.
 -}
 delay : Policy -> Int -> Float
 delay policy retryIndex =
