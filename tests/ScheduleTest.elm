@@ -9,7 +9,7 @@ import Fuzz
 import Test exposing (Test, describe, fuzz2, test)
 
 
-{-| Exercises retry schedules independently of failure tracking.
+{-| Exercises retry schedules.
 -}
 tests : Test
 tests =

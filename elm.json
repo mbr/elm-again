@@ -1,11 +1,10 @@
 {
     "type": "package",
     "name": "mbr/elm-again",
-    "summary": "Pure retry policies and failure tracking",
+    "summary": "Pure retry schedules and attempt limits",
     "license": "MIT",
     "version": "1.0.0",
     "exposed-modules": [
-        "Again",
         "Again.Policy",
         "Again.Schedule"
     ],

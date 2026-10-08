@@ -1,5 +1,5 @@
 {
-  description = "Pure retry policies and failure tracking for Elm";
+  description = "Pure retry schedules and attempt limits for Elm";
 
   inputs.nixpkgs.url = "nixpkgs/nixos-26.05";
 
