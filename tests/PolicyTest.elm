@@ -14,7 +14,7 @@ import Test exposing (Test, describe, fuzz2, test)
 tests : Test
 tests =
     describe "Again.Policy"
-        [ test "calculates periodic and capped exponential delays with fractional milliseconds" <|
+        [ test "calculates immediate, periodic, and capped exponential delays with fractional milliseconds" <|
             \_ ->
                 let
                     periodic =
@@ -27,8 +27,11 @@ tests =
                             )
                 in
                 Expect.equal
-                    ( [ 0.25, 0.25, 0.25, 0.25, 0.25 ], [ 0.25, 0.5, 1, 1.5, 1.5 ] )
-                    ( List.map periodic (List.range 0 4), List.map exponential (List.range 0 4) )
+                    ( [ 0, 0, 0, 0, 0 ], [ 0.25, 0.25, 0.25, 0.25, 0.25 ], [ 0.25, 0.5, 1, 1.5, 1.5 ] )
+                    ( List.map (Policy.delay Policy.immediately) (List.range 0 4)
+                    , List.map periodic (List.range 0 4)
+                    , List.map exponential (List.range 0 4)
+                    )
         , test "nested immediate policies each prepend exactly one zero delay" <|
             \_ ->
                 List.range 0 4
@@ -36,7 +39,7 @@ tests =
                     |> Expect.equal [ 0, 0, 1000, 1000, 1000 ]
         , test "large retry indices preserve zero delays, constant growth, and the cap" <|
             \_ ->
-                [ Periodic { delay = 0 }
+                [ Policy.immediately
                 , ExponentialBackoff { initialDelay = 0, multiplier = 2, maxDelay = 1000 }
                 , ExponentialBackoff { initialDelay = 0, multiplier = 2, maxDelay = 0 }
                 , ExponentialBackoff { initialDelay = 0.25, multiplier = 1, maxDelay = 1000 }

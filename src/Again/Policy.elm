@@ -1,8 +1,8 @@
-module Again.Policy exposing (Policy(..), delay)
+module Again.Policy exposing (Policy(..), immediately, delay)
 
 {-| Calculate retry delays without keeping state or consulting a clock.
 
-@docs Policy, delay
+@docs Policy, immediately, delay
 
 -}
 
@@ -31,6 +31,13 @@ type Policy
         , maxDelay : Float
         }
     | ImmediatelyThen Policy
+
+
+{-| Retry without waiting, every time. Equivalent to `Periodic { delay = 0 }`.
+-}
+immediately : Policy
+immediately =
+    Periodic { delay = 0 }
 
 
 {-| Returns a delay for a nonnegative, zero-based retry index.
