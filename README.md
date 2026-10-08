@@ -12,8 +12,7 @@ schedule =
         (ExponentialBackoff { initialDelay = 1000, multiplier = 2, maxDelay = 30000 })
 
 policy =
-    Policy.init schedule
-        |> Policy.withMaxAttempts 3
+    { schedule = schedule, limit = Policy.MaxAttempts 3 }
 
 ( retry, delay ) =
     Again.failed (Again.init policy)
@@ -21,7 +20,7 @@ policy =
 
 `Schedule.delay` takes a zero-based retry index and returns milliseconds as a `Float`.
 A `Policy` combines a schedule with an `AttemptLimit`: `Unlimited` or `MaxAttempts Int`.
-`Policy.init` allows unlimited retries; `Policy.withMaxAttempts` sets a limit including the initial operation.
+`Policy.init` allows unlimited retries. `MaxAttempts` includes the initial operation.
 `Again.failed` advances the sequence and returns a `Maybe Float` delay, or `Nothing` once the limit is reached.
 `Again.succeeded` resets the failure count, keeping the policy.
 `Again.failures` counts failures since initialization or the last success.

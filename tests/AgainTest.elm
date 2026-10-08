@@ -74,10 +74,10 @@ tests =
             \_ ->
                 let
                     initial =
-                        ImmediatelyThen (Periodic { delay = 1000 })
-                            |> Policy.init
-                            |> Policy.withMaxAttempts 3
-                            |> Again.init
+                        Again.init
+                            { schedule = ImmediatelyThen (Periodic { delay = 1000 })
+                            , limit = Policy.MaxAttempts 3
+                            }
 
                     ( exhausted, delays ) =
                         failSeveral 4 initial
@@ -109,31 +109,6 @@ tests =
                                 |> Tuple.mapFirst Again.failures
                         )
                     |> Expect.equal (List.repeat 3 ( 2, [ Nothing, Nothing ] ))
-        , test "overriding a policy's limit preserves its schedule" <|
-            \_ ->
-                let
-                    limited =
-                        ExponentialBackoff { initialDelay = 1000, multiplier = 2, maxDelay = 10000 }
-                            |> Policy.init
-                            |> Policy.withMaxAttempts 3
-
-                    ( stopped, delays ) =
-                        limited
-                            |> Again.init
-                            |> failSeveral 4
-
-                    ( stoppedLater, extendedDelays ) =
-                        limited
-                            |> Policy.withMaxAttempts 4
-                            |> Again.init
-                            |> failSeveral 4
-                in
-                Expect.all
-                    [ \_ -> Expect.equal [ Just 1000, Just 2000, Nothing, Nothing ] delays
-                    , \_ -> Expect.equal [ Just 1000, Just 2000, Just 4000, Nothing ] extendedDelays
-                    , \_ -> Expect.equal ( 4, 4 ) ( Again.failures stopped, Again.failures stoppedLater )
-                    ]
-                    ()
         ]
 
 
