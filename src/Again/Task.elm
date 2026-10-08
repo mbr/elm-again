@@ -18,7 +18,6 @@ import Task exposing (Task)
 
 
 {-| Retries any failure until the task succeeds or the attempt limit is reached.
-Equivalent to `retryIf (always True)`.
 -}
 retry : Policy -> Task error value -> Task error value
 retry =
@@ -26,8 +25,7 @@ retry =
 
 
 {-| Retries only errors accepted by the predicate. Returns the last error when
-it is rejected or the attempt limit is reached. Each execution starts a fresh
-attempt count.
+it is rejected or the attempt limit is reached.
 -}
 retryIf : (error -> Bool) -> Policy -> Task error value -> Task error value
 retryIf retryable policy task =
