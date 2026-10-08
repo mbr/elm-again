@@ -1,43 +1,33 @@
-module Again exposing (Retry, init, withMaxAttempts, succeeded, failed, failures)
+module Again exposing (Retry, init, succeeded, failed, failures)
 
 {-| Count failures and obtain retry delays. Callers decide which failures warrant
 retrying and handle all waiting and execution.
 
-@docs Retry, init, withMaxAttempts, succeeded, failed, failures
+@docs Retry, init, succeeded, failed, failures
 
 -}
 
 import Again.Policy as Policy exposing (Policy)
+import Again.Schedule as Schedule
 
 
-{-| A policy, an optional attempt limit, and a failure count since initialization
-or the last success.
+{-| A policy and its failure count since initialization or the last success.
 -}
 type Retry
     = Retry
         { policy : Policy
         , failures : Int
-        , maxAttempts : Maybe Int
         }
 
 
-{-| Starts an unlimited retry sequence without performing an attempt.
+{-| Starts a retry sequence using a policy, without performing an attempt.
 -}
 init : Policy -> Retry
 init policy =
-    Retry { policy = policy, failures = 0, maxAttempts = Nothing }
+    Retry { policy = policy, failures = 0 }
 
 
-{-| Limits attempts, including the initial operation. For example, a limit of
-three allows two retries. A limit of one or less allows no retries.
-Setting a limit preserves the current failure count.
--}
-withMaxAttempts : Int -> Retry -> Retry
-withMaxAttempts limit (Retry state) =
-    Retry { state | maxAttempts = Just limit }
-
-
-{-| Resets the failure count while retaining the policy and attempt limit.
+{-| Resets the failure count while retaining the policy.
 -}
 succeeded : Retry -> Retry
 succeeded (Retry state) =
@@ -55,16 +45,19 @@ failed (Retry state) =
             state.failures + 1
 
         limitReached =
-            state.maxAttempts
-                |> Maybe.map (\limit -> count >= limit)
-                |> Maybe.withDefault False
+            case state.policy.limit of
+                Policy.Unlimited ->
+                    False
+
+                Policy.MaxAttempts limit ->
+                    count >= limit
     in
     ( Retry { state | failures = count }
     , if limitReached then
         Nothing
 
       else
-        Just (Policy.delay state.policy state.failures)
+        Just (Schedule.delay state.policy.schedule state.failures)
     )
 
 

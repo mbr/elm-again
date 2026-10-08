@@ -1,81 +1,42 @@
-module Again.Policy exposing (Policy(..), immediately, delay)
+module Again.Policy exposing (Policy, AttemptLimit(..), init, withMaxAttempts)
 
-{-| Choose how long to wait between retries.
+{-| Choose a retry schedule and how many attempts to allow.
 
-    import Again.Policy as Policy exposing (Policy(..))
-
-    policy =
-        ImmediatelyThen
-            (ExponentialBackoff
-                { initialDelay = 1000
-                , multiplier = 2
-                , maxDelay = 4000
-                }
-            )
-
-    delays =
-        List.map (Policy.delay policy) [ 0, 1, 2, 3, 4 ]
-
-This produces `[ 0, 1000, 2000, 4000, 4000 ]` milliseconds: retry immediately,
-then back off up to four seconds.
-
-@docs Policy, immediately, delay
+@docs Policy, AttemptLimit, init, withMaxAttempts
 
 -}
 
+import Again.Schedule exposing (Schedule)
 
-{-| Choose how long to wait before each retry. All delays are in milliseconds.
 
-`Periodic` uses the same `delay` for every retry.
+{-| A retry schedule and an attempt limit, ready to pass to `Again.init`.
+-}
+type alias Policy =
+    { schedule : Schedule
+    , limit : AttemptLimit
+    }
 
-`ExponentialBackoff` starts with `initialDelay`, then multiplies the delay by
-`multiplier` for each subsequent retry, up to `maxDelay`.
 
-`ImmediatelyThen` retries once without waiting, then follows the wrapped policy
-from its first delay. Wrap it around either of the other variants, or nest it
-for several immediate retries.
+{-| `Unlimited` keeps offering retries.
 
-Choose a `multiplier` of one or more and delays of zero or more, with
-`maxDelay` at least as large as `initialDelay`. The policy uses your values
-as given, so make sure they're finite numbers.
+`MaxAttempts` counts the initial operation as an attempt, so `MaxAttempts 3`
+allows two retries. A limit of one or less allows no retries.
 
 -}
-type Policy
-    = Periodic { delay : Float }
-    | ExponentialBackoff
-        { initialDelay : Float
-        , multiplier : Float
-        , maxDelay : Float
-        }
-    | ImmediatelyThen Policy
+type AttemptLimit
+    = Unlimited
+    | MaxAttempts Int
 
 
-{-| Retry without waiting, every time. Equivalent to `Periodic { delay = 0 }`.
+{-| Uses a schedule with no attempt limit.
 -}
-immediately : Policy
-immediately =
-    Periodic { delay = 0 }
+init : Schedule -> Policy
+init schedule =
+    { schedule = schedule, limit = Unlimited }
 
 
-{-| Returns a delay for a nonnegative, zero-based retry index.
+{-| Sets the attempt limit while keeping the schedule.
 -}
-delay : Policy -> Int -> Float
-delay policy retryIndex =
-    case policy of
-        Periodic config ->
-            config.delay
-
-        ExponentialBackoff config ->
-            if config.initialDelay == 0 then
-                0
-
-            else
-                min config.maxDelay
-                    (config.initialDelay * config.multiplier ^ toFloat retryIndex)
-
-        ImmediatelyThen inner ->
-            if retryIndex == 0 then
-                0
-
-            else
-                delay inner (retryIndex - 1)
+withMaxAttempts : Int -> Policy -> Policy
+withMaxAttempts limit policy =
+    { policy | limit = MaxAttempts limit }

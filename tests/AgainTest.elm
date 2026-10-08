@@ -4,7 +4,8 @@ module AgainTest exposing (tests)
 -}
 
 import Again
-import Again.Policy exposing (Policy(..))
+import Again.Policy as Policy
+import Again.Schedule exposing (Schedule(..))
 import Expect
 import Test exposing (Test, describe, test)
 
@@ -18,12 +19,12 @@ tests =
             \_ ->
                 let
                     initial =
-                        Again.init
-                            (ImmediatelyThen
-                                (ExponentialBackoff
-                                    { initialDelay = 1000, multiplier = 2, maxDelay = 3000 }
-                                )
+                        ImmediatelyThen
+                            (ExponentialBackoff
+                                { initialDelay = 1000, multiplier = 2, maxDelay = 3000 }
                             )
+                            |> Policy.init
+                            |> Again.init
 
                     ( first, firstDelay ) =
                         Again.failed initial
@@ -59,7 +60,9 @@ tests =
             \_ ->
                 let
                     initial =
-                        Again.init (Periodic { delay = 0.25 })
+                        Periodic { delay = 0.25 }
+                            |> Policy.init
+                            |> Again.init
                             |> Again.succeeded
                             |> Again.succeeded
 
@@ -71,8 +74,10 @@ tests =
             \_ ->
                 let
                     initial =
-                        Again.init (ImmediatelyThen (Periodic { delay = 1000 }))
-                            |> Again.withMaxAttempts 3
+                        ImmediatelyThen (Periodic { delay = 1000 })
+                            |> Policy.init
+                            |> Policy.withMaxAttempts 3
+                            |> Again.init
 
                     ( exhausted, delays ) =
                         failSeveral 4 initial
@@ -96,34 +101,39 @@ tests =
                 [ -1, 0, 1 ]
                     |> List.map
                         (\limit ->
-                            Again.init (ImmediatelyThen (Periodic { delay = 1000 }))
-                                |> Again.withMaxAttempts limit
+                            Again.init
+                                { schedule = ImmediatelyThen (Periodic { delay = 1000 })
+                                , limit = Policy.MaxAttempts limit
+                                }
                                 |> failSeveral 2
                                 |> Tuple.mapFirst Again.failures
                         )
                     |> Expect.equal (List.repeat 3 ( 2, [ Nothing, Nothing ] ))
-        , test "changing the limit preserves failures and the policy's position" <|
+        , test "overriding a policy's limit preserves its schedule" <|
             \_ ->
                 let
-                    ( retry, _ ) =
-                        Again.init
-                            (ExponentialBackoff { initialDelay = 1000, multiplier = 2, maxDelay = 10000 })
-                            |> failSeveral 2
-
                     limited =
-                        Again.withMaxAttempts 3 retry
+                        ExponentialBackoff { initialDelay = 1000, multiplier = 2, maxDelay = 10000 }
+                            |> Policy.init
+                            |> Policy.withMaxAttempts 3
 
-                    ( stopped, stoppedDelay ) =
-                        Again.failed limited
-
-                    ( continued, continuedDelay ) =
+                    ( stopped, delays ) =
                         limited
-                            |> Again.withMaxAttempts 4
-                            |> Again.failed
+                            |> Again.init
+                            |> failSeveral 4
+
+                    ( stoppedLater, extendedDelays ) =
+                        limited
+                            |> Policy.withMaxAttempts 4
+                            |> Again.init
+                            |> failSeveral 4
                 in
-                Expect.equal
-                    ( [ 2, 3, 3 ], [ Nothing, Just 4000 ] )
-                    ( List.map Again.failures [ limited, stopped, continued ], [ stoppedDelay, continuedDelay ] )
+                Expect.all
+                    [ \_ -> Expect.equal [ Just 1000, Just 2000, Nothing, Nothing ] delays
+                    , \_ -> Expect.equal [ Just 1000, Just 2000, Just 4000, Nothing ] extendedDelays
+                    , \_ -> Expect.equal ( 4, 4 ) ( Again.failures stopped, Again.failures stoppedLater )
+                    ]
+                    ()
         ]
 
 
