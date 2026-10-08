@@ -1,0 +1,63 @@
+module PolicyTest exposing (tests)
+
+{-| Checks delay sequences, policy composition, and numeric boundaries.
+-}
+
+import Again.Policy as Policy exposing (Policy(..))
+import Expect
+import Fuzz
+import Test exposing (Test, describe, fuzz2, test)
+
+
+{-| Exercises stateless policies independently of failure tracking.
+-}
+tests : Test
+tests =
+    describe "Again.Policy"
+        [ test "calculates periodic and capped exponential delays with fractional milliseconds" <|
+            \_ ->
+                let
+                    periodic =
+                        Policy.delay (Periodic { delay = 0.25 })
+
+                    exponential =
+                        Policy.delay
+                            (ExponentialBackoff
+                                { initialDelay = 0.25, multiplier = 2, maxDelay = 1.5 }
+                            )
+                in
+                Expect.equal
+                    ( [ 0.25, 0.25, 0.25, 0.25, 0.25 ], [ 0.25, 0.5, 1, 1.5, 1.5 ] )
+                    ( List.map periodic (List.range 0 4), List.map exponential (List.range 0 4) )
+        , test "nested immediate policies each prepend exactly one zero delay" <|
+            \_ ->
+                List.range 0 4
+                    |> List.map (Policy.delay (ImmediatelyThen (ImmediatelyThen (Periodic { delay = 1000 }))))
+                    |> Expect.equal [ 0, 0, 1000, 1000, 1000 ]
+        , test "large retry indices preserve zero delays, constant growth, and the cap" <|
+            \_ ->
+                [ Periodic { delay = 0 }
+                , ExponentialBackoff { initialDelay = 0, multiplier = 2, maxDelay = 1000 }
+                , ExponentialBackoff { initialDelay = 0, multiplier = 2, maxDelay = 0 }
+                , ExponentialBackoff { initialDelay = 0.25, multiplier = 1, maxDelay = 1000 }
+                , ExponentialBackoff { initialDelay = 0.25, multiplier = 2, maxDelay = 1000 }
+                ]
+                    |> List.map (\policy -> Policy.delay policy 100000)
+                    |> Expect.equal [ 0, 0, 0, 0.25, 1000 ]
+        , fuzz2 (Fuzz.intRange 0 10000) (Fuzz.intRange 0 10000) "an immediate prefix shifts the wrapped sequence without changing its delays" <|
+            \initialDelay retryIndex ->
+                let
+                    inner =
+                        ExponentialBackoff
+                            { initialDelay = toFloat initialDelay
+                            , multiplier = 2
+                            , maxDelay = 10000
+                            }
+
+                    wrapped =
+                        ImmediatelyThen inner
+                in
+                Expect.equal
+                    ( 0, Policy.delay inner retryIndex )
+                    ( Policy.delay wrapped 0, Policy.delay wrapped (retryIndex + 1) )
+        ]

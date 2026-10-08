@@ -1,5 +1,5 @@
 {
-  description = "Pure retry state machines for Elm";
+  description = "Pure retry policies and failure tracking for Elm";
 
   inputs.nixpkgs.url = "nixpkgs/nixos-26.05";
 
