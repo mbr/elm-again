@@ -2,6 +2,18 @@ module Again.Policy exposing (Policy(..), immediately, delay)
 
 {-| Calculate retry delays without keeping state or consulting a clock.
 
+    import Again.Policy as Policy exposing (Policy(..))
+
+    policy =
+        ImmediatelyThen
+            (ExponentialBackoff { initialDelay = 1000, multiplier = 2, maxDelay = 4000 })
+
+    delays =
+        List.map (Policy.delay policy) [ 0, 1, 2, 3, 4 ]
+
+This produces `[ 0, 1000, 2000, 4000, 4000 ]` milliseconds: retry immediately,
+then back off up to four seconds.
+
 @docs Policy, immediately, delay
 
 -}
