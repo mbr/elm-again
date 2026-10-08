@@ -1,8 +1,8 @@
-module Again.Policy exposing (Policy, AttemptLimit(..), init)
+module Again.Policy exposing (Policy, AttemptLimit(..), init, allowsRetry)
 
 {-| Choose a retry schedule and how many attempts to allow.
 
-@docs Policy, AttemptLimit, init
+@docs Policy, AttemptLimit, init, allowsRetry
 
 -}
 
@@ -33,3 +33,16 @@ type AttemptLimit
 init : Schedule -> Policy
 init schedule =
     { schedule = schedule, limit = Unlimited }
+
+
+{-| Whether another attempt is allowed. The count includes the initial operation
+and any retries already made.
+-}
+allowsRetry : Policy -> Int -> Bool
+allowsRetry policy attempts =
+    case policy.limit of
+        Unlimited ->
+            True
+
+        MaxAttempts limit ->
+            attempts < limit

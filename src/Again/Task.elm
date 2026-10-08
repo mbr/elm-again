@@ -11,7 +11,7 @@ schedule controls the waits between subsequent attempts.
 
 -}
 
-import Again.Policy exposing (AttemptLimit(..), Policy)
+import Again.Policy as Policy exposing (Policy)
 import Again.Schedule as Schedule
 import Process
 import Task exposing (Task)
@@ -41,16 +41,7 @@ attempt retryable policy task count =
     task
         |> Task.onError
             (\error ->
-                let
-                    allowed =
-                        case policy.limit of
-                            Unlimited ->
-                                True
-
-                            MaxAttempts limit ->
-                                count < limit
-                in
-                if retryable error && allowed then
+                if retryable error && Policy.allowsRetry policy count then
                     Process.sleep (Schedule.delay policy.schedule (count - 1))
                         |> Task.andThen (\_ -> attempt retryable policy task (count + 1))
 
