@@ -1,6 +1,6 @@
 # elm-again
 
-Pure retry schedules and attempt limits. Callers handle execution and waiting.
+Retry schedules and attempt limits, with optional task helpers.
 
 ```elm
 import Again.Policy as Policy
@@ -17,5 +17,7 @@ firstRetryDelay =
 
 `Schedule.delay` takes a zero-based retry index and returns milliseconds as a `Float`.
 `Policy.init` allows unlimited retries. `MaxAttempts` includes the initial operation.
+
+Use `Again.Task.retry policy task` to retry any failure, or `Again.Task.retryIf isTransient policy task` to choose which errors to retry. Both return a task that succeeds with the result or fails with the last error.
 
 Develop with `nix develop`, then `./format.sh` and `./check.sh`. `nix build` runs the same checks in a sandbox. Refresh pinned Elm dependencies with `./update-deps.sh`.
