@@ -9,7 +9,7 @@ module Again.Policy exposing (Policy, AttemptLimit(..), init, withMaxAttempts)
 import Again.Schedule exposing (Schedule)
 
 
-{-| A retry schedule and an attempt limit, ready to pass to `Again.init`.
+{-| A retry schedule and an attempt limit.
 -}
 type alias Policy =
     { schedule : Schedule
