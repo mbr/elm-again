@@ -122,14 +122,18 @@ or `Nothing` if the attempt limit is reached.
 -}
 fail : error -> Remote error value -> ( Remote error value, Maybe Float )
 fail =
-    failWith Decision.Retry
+    failWith (always Decision.Retry)
 
 
-{-| Records a failure using the decision and policy. Returns a retry delay in
+{-| Classifies a failure and applies the policy. Returns a retry delay in
 milliseconds, or `Nothing` if no retry is allowed.
 -}
-failWith : Decision -> error -> Remote error value -> ( Remote error value, Maybe Float )
-failWith decision error (Remote policy current) =
+failWith : (error -> Decision) -> error -> Remote error value -> ( Remote error value, Maybe Float )
+failWith decide error (Remote policy current) =
+    let
+        decision =
+            decide error
+    in
     case current of
         WaitingForRetry context ->
             failureOutcome decision error (context.attempts + 1) policy

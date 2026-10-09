@@ -131,7 +131,7 @@ tests =
                         Remote.succeed "socket" retrying
 
                     rejected =
-                        Remote.failWith Stop "denied" attempting |> Tuple.first
+                        Remote.failWith (always Stop) "denied" attempting |> Tuple.first
 
                     exhausted =
                         retrying
@@ -167,30 +167,44 @@ tests =
                                 , ( WaitingForRetry { attempts = 1, lastError = "new failure" }, Just 1000 )
                                 ]
                     , \_ ->
-                        List.map (Remote.failWith Stop "denied again" >> Tuple.mapFirst Remote.state) allStates
+                        List.map (Remote.failWith (always Stop) "denied again" >> Tuple.mapFirst Remote.state) allStates
                             |> Expect.equal (List.repeat 6 ( Failed "denied again", Nothing ))
                     , \_ ->
                         List.map (Remote.succeed "replacement") allStates
                             |> Expect.equal (List.repeat 6 (Remote.init policy |> Remote.succeed "replacement"))
                     ]
                     ()
-        , test "decisions can stop or extend a wait but cannot exceed the attempt limit" <|
+        , test "the classifier receives each error and its decisions respect the policy" <|
             \_ ->
                 let
+                    decide error =
+                        case error of
+                            "busy" ->
+                                RetryAfter 1500
+
+                            "still busy" ->
+                                RetryAfter 10
+
+                            "unavailable" ->
+                                RetryAfter 5000
+
+                            _ ->
+                                Stop
+
                     attempting =
                         Remote.init policy
 
                     ( waiting, firstDelay ) =
-                        Remote.failWith (RetryAfter 1500) "busy" attempting
+                        Remote.failWith decide "busy" attempting
 
                     ( waitingAgain, secondDelay ) =
-                        waiting |> Remote.beginRetry |> Tuple.first |> Remote.failWith (RetryAfter 10) "still busy"
+                        waiting |> Remote.beginRetry |> Tuple.first |> Remote.failWith decide "still busy"
 
                     exhausted =
-                        waitingAgain |> Remote.beginRetry |> Tuple.first |> Remote.failWith (RetryAfter 5000) "unavailable"
+                        waitingAgain |> Remote.beginRetry |> Tuple.first |> Remote.failWith decide "unavailable"
 
                     stopped =
-                        Remote.failWith Stop "denied" attempting
+                        Remote.failWith decide "denied" attempting
                 in
                 [ ( waiting, firstDelay ), ( waitingAgain, secondDelay ), exhausted, stopped ]
                     |> List.map (Tuple.mapFirst Remote.state)
