@@ -57,7 +57,6 @@ Retry a GET up to three total attempts on timeouts or network errors:
 -}
 
 import Again.Policy as Policy exposing (Policy)
-import Again.Schedule as Schedule
 import Process
 import Task exposing (Task)
 
@@ -84,9 +83,14 @@ attempt retryable policy task count =
     task
         |> Task.onError
             (\error ->
-                if retryable error && Policy.allowsRetry policy count then
-                    Process.sleep (Schedule.delay policy.schedule (count - 1))
-                        |> Task.andThen (\_ -> attempt retryable policy task (count + 1))
+                if retryable error then
+                    case Policy.retryDelay policy count of
+                        Just delay ->
+                            Process.sleep delay
+                                |> Task.andThen (\_ -> attempt retryable policy task (count + 1))
+
+                        Nothing ->
+                            Task.fail error
 
                 else
                     Task.fail error

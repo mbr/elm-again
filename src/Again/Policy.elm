@@ -1,12 +1,12 @@
-module Again.Policy exposing (Policy, AttemptLimit(..), init, allowsRetry)
+module Again.Policy exposing (Policy, AttemptLimit(..), init, allowsRetry, retryDelay)
 
 {-| Choose a retry schedule and how many attempts to allow.
 
-@docs Policy, AttemptLimit, init, allowsRetry
+@docs Policy, AttemptLimit, init, allowsRetry, retryDelay
 
 -}
 
-import Again.Schedule exposing (Schedule)
+import Again.Schedule as Schedule exposing (Schedule)
 
 
 {-| A retry schedule and an attempt limit.
@@ -46,3 +46,15 @@ allowsRetry policy attempts =
 
         MaxAttempts limit ->
             attempts < limit
+
+
+{-| Delay in milliseconds before another attempt, or `Nothing` when exhausted.
+Count attempts already made, starting at one for the initial operation.
+-}
+retryDelay : Policy -> Int -> Maybe Float
+retryDelay policy attempts =
+    if allowsRetry policy attempts then
+        Just (Schedule.delay policy.schedule (attempts - 1))
+
+    else
+        Nothing

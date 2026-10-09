@@ -1,6 +1,6 @@
 module PolicyTest exposing (tests)
 
-{-| Checks retry permission at attempt-limit boundaries.
+{-| Checks retry delays and attempt-limit boundaries.
 -}
 
 import Again.Policy as Policy exposing (AttemptLimit(..))
@@ -9,7 +9,7 @@ import Expect
 import Test exposing (Test, describe, test)
 
 
-{-| Verifies that limits include the initial operation and remain exhausted.
+{-| Verifies delay indexing and limits that include the initial operation.
 -}
 tests : Test
 tests =
@@ -35,5 +35,27 @@ tests =
                         , [ False, False, False, False ]
                         , [ False, False, False, False ]
                         , [ False, False, False, False ]
+                        ]
+        , test "retry delays start at the first schedule entry and stop at the attempt limit" <|
+            \_ ->
+                let
+                    schedule =
+                        Schedule.ImmediatelyThen
+                            (Schedule.ExponentialBackoff
+                                { initialDelay = 1000, multiplier = 2, maxDelay = 4000 }
+                            )
+                in
+                [ Unlimited, MaxAttempts 6, MaxAttempts 1, MaxAttempts 0, MaxAttempts -1 ]
+                    |> List.map
+                        (\limit ->
+                            List.range 1 7
+                                |> List.map (Policy.retryDelay { schedule = schedule, limit = limit })
+                        )
+                    |> Expect.equal
+                        [ [ Just 0, Just 1000, Just 2000, Just 4000, Just 4000, Just 4000, Just 4000 ]
+                        , [ Just 0, Just 1000, Just 2000, Just 4000, Just 4000, Nothing, Nothing ]
+                        , List.repeat 7 Nothing
+                        , List.repeat 7 Nothing
+                        , List.repeat 7 Nothing
                         ]
         ]
