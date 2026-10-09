@@ -1,4 +1,4 @@
-module Again.Task exposing (retry, retryIf)
+module Again.Task exposing (retry, retryIf, retryWith)
 
 {-| Run tasks with a retry policy. The first attempt runs immediately; the
 schedule controls the waits between subsequent attempts.
@@ -52,11 +52,12 @@ Retry a GET up to three total attempts on timeouts or network errors:
             Http.BadStatus_ metadata _ ->
                 Err (Http.BadStatus metadata.statusCode)
 
-@docs retry, retryIf
+@docs retry, retryIf, retryWith
 
 -}
 
-import Again.Policy as Policy exposing (Policy)
+import Again.Decision as Decision exposing (Decision(..))
+import Again.Policy exposing (Policy)
 import Process
 import Task exposing (Task)
 
@@ -75,26 +76,38 @@ For HTTP tasks, [Again.Http.isRetryable](Again-Http#isRetryable) supplies a defa
 
 -}
 retryIf : (error -> Bool) -> Policy -> Task error value -> Task error value
-retryIf retryable policy task =
-    attempt retryable policy task 1
+retryIf retryable =
+    retryWith
+        (\error ->
+            if retryable error then
+                Retry
+
+            else
+                Stop
+        )
+
+
+{-| Classifies each error with a [Decision](Again-Decision#Decision).
+`RetryAfter` waits for the greater of the requested delay and the policy's delay.
+Returns the last error when stopped or when the attempt limit is reached.
+-}
+retryWith : (error -> Decision) -> Policy -> Task error value -> Task error value
+retryWith decide policy task =
+    attempt decide policy task 1
 
 
 {-| Runs one attempt, waiting before another if its error and the policy allow it.
 -}
-attempt : (error -> Bool) -> Policy -> Task error value -> Int -> Task error value
-attempt retryable policy task count =
+attempt : (error -> Decision) -> Policy -> Task error value -> Int -> Task error value
+attempt decide policy task count =
     task
         |> Task.onError
             (\error ->
-                if retryable error then
-                    case Policy.retryDelay policy count of
-                        Just delay ->
-                            Process.sleep delay
-                                |> Task.andThen (\_ -> attempt retryable policy task (count + 1))
+                case Decision.retryDelay (decide error) policy count of
+                    Just delay ->
+                        Process.sleep delay
+                            |> Task.andThen (\_ -> attempt decide policy task (count + 1))
 
-                        Nothing ->
-                            Task.fail error
-
-                else
-                    Task.fail error
+                    Nothing ->
+                        Task.fail error
             )
