@@ -36,6 +36,21 @@ tests =
                         , [ False, False, False, False ]
                         , [ False, False, False, False ]
                         ]
+        , test "remaining attempts distinguish unlimited policies from exhausted limits" <|
+            \_ ->
+                [ Unlimited, MaxAttempts 3, MaxAttempts 1, MaxAttempts 0, MaxAttempts -1 ]
+                    |> List.map
+                        (\limit ->
+                            List.range 0 4
+                                |> List.map (Policy.attemptsLeft { schedule = Schedule.immediately, limit = limit })
+                        )
+                    |> Expect.equal
+                        [ List.repeat 5 Nothing
+                        , [ Just 3, Just 2, Just 1, Just 0, Just 0 ]
+                        , [ Just 1, Just 0, Just 0, Just 0, Just 0 ]
+                        , List.repeat 5 (Just 0)
+                        , List.repeat 5 (Just 0)
+                        ]
         , test "retry delays start at the first schedule entry and stop at the attempt limit" <|
             \_ ->
                 let

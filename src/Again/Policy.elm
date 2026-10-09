@@ -1,8 +1,8 @@
-module Again.Policy exposing (Policy, AttemptLimit(..), unlimited, allowsRetry, retryDelay)
+module Again.Policy exposing (Policy, AttemptLimit(..), unlimited, attemptsLeft, allowsRetry, retryDelay)
 
 {-| Choose a retry schedule and how many attempts to allow.
 
-@docs Policy, AttemptLimit, unlimited, allowsRetry, retryDelay
+@docs Policy, AttemptLimit, unlimited, attemptsLeft, allowsRetry, retryDelay
 
 -}
 
@@ -35,17 +35,30 @@ unlimited schedule =
     { schedule = schedule, limit = Unlimited }
 
 
+{-| Remaining attempts after the supplied count, or `Nothing` for an unlimited policy.
+Exhausted limits return `Just 0`.
+-}
+attemptsLeft : Policy -> Int -> Maybe Int
+attemptsLeft policy attempts =
+    case policy.limit of
+        Unlimited ->
+            Nothing
+
+        MaxAttempts limit ->
+            Just (max 0 (limit - attempts))
+
+
 {-| Whether another attempt is allowed. The count includes the initial operation
 and any retries already made.
 -}
 allowsRetry : Policy -> Int -> Bool
 allowsRetry policy attempts =
-    case policy.limit of
-        Unlimited ->
+    case attemptsLeft policy attempts of
+        Nothing ->
             True
 
-        MaxAttempts limit ->
-            attempts < limit
+        Just remaining ->
+            remaining > 0
 
 
 {-| Delay in milliseconds before another attempt, or `Nothing` when exhausted.
