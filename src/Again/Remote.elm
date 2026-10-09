@@ -4,10 +4,7 @@ module Again.Remote exposing
     , retry, ok, failed, failedWith
     )
 
-{-| Track an operation's value and retries, beginning with its initial attempt.
-
-The caller runs attempts and schedules retries.
-Discard the remote to abandon tracking; this does not cancel pending effects.
+{-| Retry-aware state for a remote value.
 
 @docs Remote, State, RetryContext
 @docs init, state, result, get
@@ -25,18 +22,7 @@ type Remote error value
     = Remote Policy (State error value)
 
 
-{-| The current state of the value.
-
-`Attempting` is the first attempt in flight.
-
-`WaitingForRetry` is waiting before another attempt.
-
-`Retrying` is a subsequent attempt in flight.
-
-`Successful` holds the available value.
-
-`Failed` indicates we have failed and stopped trying.
-
+{-| The current state of the remote value.
 -}
 type State error value
     = Attempting
@@ -46,12 +32,7 @@ type State error value
     | Failed error
 
 
-{-| Information about the current retries.
-
-`attempts` counts completed attempts, starting at one.
-
-`lastError` is the most recent failure.
-
+{-| The number of completed attempts and the most recent error.
 -}
 type alias RetryContext error =
     { attempts : Int
@@ -59,7 +40,7 @@ type alias RetryContext error =
     }
 
 
-{-| Creates a remote value with its initial attempt in flight.
+{-| Creates a remote value in `Attempting` state.
 -}
 init : Policy -> Remote error value
 init policy =
@@ -73,10 +54,7 @@ state (Remote _ current) =
     current
 
 
-{-| Returns the current result.
-
-Pending states return `Nothing`.
-
+{-| Returns the success or terminal error, or `Nothing` while pending.
 -}
 result : Remote error value -> Maybe (Result error value)
 result remote =
@@ -98,11 +76,8 @@ get =
     result >> Maybe.andThen Result.toMaybe
 
 
-{-| Marks a pending retry as running.
-
-Returns `True` when moving from `WaitingForRetry` to `Retrying`.
-Other states are unchanged and return `False`.
-
+{-| Moves `WaitingForRetry` to `Retrying`, returning `True` if changed.
+Other states return unchanged with `False`.
 -}
 retry : Remote error value -> ( Remote error value, Bool )
 retry ((Remote policy current) as remote) =
@@ -114,34 +89,23 @@ retry ((Remote policy current) as remote) =
             ( remote, False )
 
 
-{-| Records success.
-
-This discards previous failures and attempt counts.
-
+{-| Stores a successful value and clears the retry context.
 -}
 ok : value -> Remote error value -> Remote error value
 ok value (Remote policy _) =
     Remote policy (Successful value)
 
 
-{-| Records a failure and requests a retry.
-
-Use `failedWith` when some errors should not be retried.
-
-Returns the retry delay in milliseconds, or `Nothing` when exhausted.
-
+{-| Records a failure with `Decision.Retry`. Returns a delay in milliseconds,
+or `Nothing` if the attempt limit is reached.
 -}
 failed : error -> Remote error value -> ( Remote error value, Maybe Float )
 failed =
     failedWith Decision.Retry
 
 
-{-| Records a failure using your decision about whether to retry the error.
-
-Advances existing retry counts; otherwise starts at one.
-
-Returns a delay in milliseconds, or `Nothing` when retrying is stopped or exhausted.
-
+{-| Records a failure using the decision and policy. Returns a retry delay in
+milliseconds, or `Nothing` if no retry is allowed.
 -}
 failedWith : Decision -> error -> Remote error value -> ( Remote error value, Maybe Float )
 failedWith decision error (Remote policy current) =
