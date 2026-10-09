@@ -70,6 +70,9 @@ retry =
 
 {-| Retries only errors accepted by the predicate. Returns the last error when
 it is rejected or the attempt limit is reached.
+
+For HTTP tasks, [Again.Http.isRetryable](Again-Http#isRetryable) supplies a default predicate.
+
 -}
 retryIf : (error -> Bool) -> Policy -> Task error value -> Task error value
 retryIf retryable policy task =
