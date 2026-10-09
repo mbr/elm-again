@@ -4,7 +4,7 @@ Retries for tasks and manually managed values, supporting exponential backoff.
 
 ## Retries for tasks
 
-The `Again.Task` module allows for setting condition on which a task is retried a configurable number of times, a specific backoff schedule like exponential backoff.
+The `Again.Task` module allows you to set the conditions under which a task is retried, the number of attempts, and a backoff schedule such as exponential backoff.
 
 Here is an example that fetches a text file with up to three attempts, retrying transient HTTP failures:
 
@@ -38,9 +38,9 @@ loadMessage =
 
 ## Caller-managed retryable remote data
 
-`Again.Remote` puts you in charge of performing retries, but allows you to use the same bookkeeping methods to track succcess or failure. A successful `Remote` can even later fail, e.g. like a websocket connection closure, and cause a retry.
+`Again.Remote` puts you in charge of performing retries but allows you to use the same bookkeeping methods to track success or failure. A successful `Remote` can even fail later, for example when a WebSocket connection closes, and trigger a retry.
 
-As an example, here is polling a submitted job. A retry should happen on  `HTTP 202 Accepted`, and the job is considered finished on `HTTP 200 OK`. All other returns are considered a failure:
+As an example, here is how to poll a submitted job. A retry should happen on `HTTP 202 Accepted`, and the job is considered finished on `HTTP 200 OK`. All other responses are considered failures:
 
 ```elm
 import Again.Decision as Decision
