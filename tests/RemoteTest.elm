@@ -78,8 +78,8 @@ tests =
                             |> Expect.equal [ Nothing, Nothing, Nothing, Nothing, Nothing, Just "socket", Nothing, Just "replacement" ]
                     ]
                     ()
-        , fuzz (Fuzz.intRange -2 12) "attempt limits include the initial attempt and exhaustion exposes the final error" <|
-            \limit ->
+        , fuzz (Fuzz.pair (Fuzz.intRange -2 12) Fuzz.bool) "reported failures count toward limits with or without start notifications" <|
+            \( limit, reportStarts ) ->
                 let
                     attempts =
                         max 1 limit
@@ -90,7 +90,14 @@ tests =
                                 (\number ( current, previousDelays ) ->
                                     let
                                         ( next, delay ) =
-                                            current |> Remote.started |> Remote.failed (String.fromInt number)
+                                            current
+                                                |> (if reportStarts then
+                                                        Remote.started
+
+                                                    else
+                                                        identity
+                                                   )
+                                                |> Remote.failed (String.fromInt number)
                                     in
                                     ( next, previousDelays ++ [ delay ] )
                                 )
@@ -103,7 +110,7 @@ tests =
                     , \_ -> Expect.equal Nothing (Remote.get exhausted)
                     ]
                     ()
-        , test "starts and failures outside their active states do nothing, while accepted successes replace any state" <|
+        , test "starts and outcomes apply from every state, preserving only active retry context" <|
             \_ ->
                 let
                     initial =
@@ -124,26 +131,46 @@ tests =
                     stopped =
                         Remote.failedWith Stop "denied" attempting |> Tuple.first
 
-                    unchangedStarts =
-                        [ attempting, retrying, successful, stopped ]
-
-                    unchangedFailures =
-                        [ initial, waiting, stopped ]
+                    exhausted =
+                        retrying
+                            |> Remote.failed "refused"
+                            |> Tuple.first
+                            |> Remote.started
+                            |> Remote.failed "unavailable"
+                            |> Tuple.first
 
                     allStates =
-                        [ initial, attempting, waiting, retrying, successful, stopped ]
+                        [ initial, attempting, waiting, retrying, successful, stopped, exhausted ]
                 in
                 Expect.all
-                    [ \_ -> Expect.equal unchangedStarts (List.map Remote.started unchangedStarts)
+                    [ \_ ->
+                        List.map (Remote.started >> Remote.state) allStates
+                            |> Expect.equal
+                                [ Attempting
+                                , Attempting
+                                , Retrying { attempts = 1, lastError = "timeout" }
+                                , Retrying { attempts = 1, lastError = "timeout" }
+                                , Attempting
+                                , Attempting
+                                , Attempting
+                                ]
                     , \_ ->
-                        List.map (Remote.failed "duplicate") unchangedFailures
-                            |> Expect.equal (List.map (\current -> ( current, Nothing )) unchangedFailures)
+                        List.map (Remote.failed "new failure" >> Tuple.mapFirst Remote.state) allStates
+                            |> Expect.equal
+                                [ ( WaitingForRetry { attempts = 1, lastError = "new failure" }, Just 1000 )
+                                , ( WaitingForRetry { attempts = 1, lastError = "new failure" }, Just 1000 )
+                                , ( WaitingForRetry { attempts = 2, lastError = "new failure" }, Just 2000 )
+                                , ( WaitingForRetry { attempts = 2, lastError = "new failure" }, Just 2000 )
+                                , ( WaitingForRetry { attempts = 1, lastError = "new failure" }, Just 1000 )
+                                , ( WaitingForRetry { attempts = 1, lastError = "new failure" }, Just 1000 )
+                                , ( WaitingForRetry { attempts = 1, lastError = "new failure" }, Just 1000 )
+                                ]
                     , \_ ->
-                        List.map (Remote.failedWith Stop "duplicate") unchangedFailures
-                            |> Expect.equal (List.map (\current -> ( current, Nothing )) unchangedFailures)
+                        List.map (Remote.failedWith Stop "denied again" >> Tuple.mapFirst Remote.state) allStates
+                            |> Expect.equal (List.repeat 7 ( Failed "denied again", Nothing ))
                     , \_ ->
                         List.map (Remote.ok "replacement") allStates
-                            |> Expect.equal (List.repeat 6 (Remote.init policy |> Remote.ok "replacement"))
+                            |> Expect.equal (List.repeat 7 (Remote.init policy |> Remote.ok "replacement"))
                     ]
                     ()
         , test "decisions can stop or extend a wait but cannot exceed the attempt limit" <|

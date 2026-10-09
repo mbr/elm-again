@@ -4,8 +4,9 @@ module Again.Remote exposing
     , started, ok, failed, failedWith
     )
 
-{-| Track a value that can succeed, fail, and be retried. The caller runs attempts,
-schedules retries, and filters obsolete callbacks.
+{-| Track a value that can succeed, fail, and be retried.
+
+The caller runs attempts, schedules retries, and filters obsolete callbacks.
 
 @docs Remote, State, RetryContext
 @docs init, state, result, get
@@ -23,15 +24,15 @@ type Remote error value
     = Remote Policy (State error value)
 
 
-{-| The current state of the value
+{-| The current state of the value.
 
-`NotAttempted` means the process to obtain it has not started.
+`NotAttempted` means no attempt has started.
 
 `Attempting` is the first attempt in flight.
 
-`WaitingForRetry` means we are waiting for time to pass until we are allowed to try again.
+`WaitingForRetry` is waiting before another attempt.
 
-`Retrying` is that attempt in flight.
+`Retrying` is a subsequent attempt in flight.
 
 `Successful` holds the available value.
 
@@ -47,10 +48,11 @@ type State error value
     | Failed error
 
 
-{-| Information about the current state of retries
+{-| Information about the current retries.
 
-`attempts` counts completed attempts, excluding any in flight. `lastError`
-is the most recent failure. The first failure has an attempt count of one.
+`attempts` counts completed attempts, starting at one.
+
+`lastError` is the most recent failure.
 
 -}
 type alias RetryContext error =
@@ -73,7 +75,10 @@ state (Remote _ current) =
     current
 
 
-{-| Returns the current success or terminal failure. Pending states return `Nothing`.
+{-| Returns the current result.
+
+Pending states return `Nothing`.
+
 -}
 result : Remote error value -> Maybe (Result error value)
 result remote =
@@ -95,62 +100,65 @@ get =
     result >> Maybe.andThen Result.toMaybe
 
 
-{-| Marks the first attempt or a pending retry as running. Other states are unchanged.
-The caller must check that the retry callback is still current before starting it.
+{-| Records that a new attempt has begun.
+
+Preserves context when waiting or retrying; all other states begin a fresh attempt.
+
 -}
 started : Remote error value -> Remote error value
-started ((Remote policy current) as remote) =
+started (Remote policy current) =
     case current of
-        NotAttempted ->
-            Remote policy Attempting
-
         WaitingForRetry context ->
             Remote policy (Retrying context)
 
+        Retrying context ->
+            Remote policy (Retrying context)
+
         _ ->
-            remote
+            Remote policy Attempting
 
 
-{-| Accepts a success from any state, discarding previous failures and attempt counts.
-The caller must check that the result still belongs to the current attempt or resource.
+{-| Records success.
+
+This discards previous failures and attempt counts.
+
 -}
 ok : value -> Remote error value -> Remote error value
 ok value (Remote policy _) =
     Remote policy (Successful value)
 
 
-{-| Records a failure and requests a retry according to the policy.
+{-| Records a failure.
+
+Returns the policy's retry delay in milliseconds, or `Nothing` when no retry is allowed.
+
 -}
 failed : error -> Remote error value -> ( Remote error value, Maybe Float )
 failed =
     failedWith Decision.Retry
 
 
-{-| Records a failure using the decision and policy. Returns a delay in milliseconds
-when waiting to retry, or `Nothing` when no retry is offered.
+{-| Records a failure with a retry decision.
 
-Acts only on `Attempting`, `Retrying`, or `Successful`. Losing a successful value
-drops it and counts as the first failure of a fresh sequence. Other states are
-unchanged and return no delay.
+Advances existing retry counts; otherwise starts at one.
+
+Returns a delay in milliseconds, or `Nothing` when no retry is allowed.
 
 -}
 failedWith : Decision -> error -> Remote error value -> ( Remote error value, Maybe Float )
-failedWith decision error ((Remote policy current) as remote) =
+failedWith decision error (Remote policy current) =
     case current of
-        Attempting ->
-            recordFailure decision error 1 policy
+        WaitingForRetry context ->
+            recordFailure decision error (context.attempts + 1) policy
 
         Retrying context ->
             recordFailure decision error (context.attempts + 1) policy
 
-        Successful _ ->
+        _ ->
             recordFailure decision error 1 policy
 
-        _ ->
-            ( remote, Nothing )
 
-
-{-| Chooses a pending retry or terminal failure from the completed attempt count.
+{-| Chooses whether to retry or stop.
 -}
 recordFailure : Decision -> error -> Int -> Policy -> ( Remote error value, Maybe Float )
 recordFailure decision error attempts policy =
