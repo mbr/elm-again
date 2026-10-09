@@ -29,13 +29,12 @@ Use this when each attempt needs to update your model, rather than waiting for a
 Suppose you've submitted a job. Its status endpoint returns `202 Accepted` with progress text while running, `200 OK` with the result when complete, or an error such as `404`. Poll the status endpoint without submitting the job again:
 
 ```elm
+import Again
 import Again.Decision as Decision
 import Again.Policy as Policy
 import Again.Remote as Remote
 import Again.Schedule exposing (Schedule(..))
 import Http
-import Process
-import Task
 
 type PollError
     = NotReady String
@@ -61,19 +60,8 @@ update msg model =
             ( Remote.ok output model, Cmd.none )
 
         Received (Err error) ->
-            let
-                ( next, delay ) =
-                    Remote.failedWith (decide error) error model
-            in
-            ( next
-            , delay
-                |> Maybe.map
-                    (\milliseconds ->
-                        Process.sleep milliseconds
-                            |> Task.perform (always PollAgain)
-                    )
-                |> Maybe.withDefault Cmd.none
-            )
+            Remote.failedWith (decide error) error model
+                |> Tuple.mapSecond (Again.wakeAfter PollAgain)
 
         PollAgain ->
             case Remote.state model of
