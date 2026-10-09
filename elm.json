@@ -9,6 +9,7 @@
         "Again.Http",
         "Again.Policy",
         "Again.Remote",
+        "Again.Remote.Cmd",
         "Again.Schedule",
         "Again.Task"
     ],

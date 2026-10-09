@@ -26,16 +26,17 @@ run task =
 
 A successful `Remote` can later fail, such as a connection that closes. `fail` discards the value and restarts the failure count at one, using the stored classifier and policy. Each attempt can update your model rather than waiting for a task's final result.
 
+The `Again.Remote.Cmd` helpers take care of scheduling retry messages.
+
 Suppose you've submitted a job. Its status endpoint returns `202 Accepted` with progress text while running, `200 OK` with the result when complete, or an error such as `404`. Poll the status endpoint without submitting the job again:
 
 ```elm
 import Again.Decision as Decision
 import Again.Policy as Policy
 import Again.Remote as Remote
+import Again.Remote.Cmd as RemoteCmd
 import Again.Schedule exposing (Schedule(..))
 import Http
-import Process
-import Task
 
 type PollError
     = NotReady String
@@ -62,29 +63,10 @@ update msg model =
             ( Remote.succeed output model, Cmd.none )
 
         Received (Err error) ->
-            failedAndSchedule PollAgain error model
+            RemoteCmd.fail PollAgain error model
 
         PollAgain ->
             ( Remote.beginRetry model, poll )
-
-{-| Records a failure and schedules a wakeup if another attempt is allowed.
--}
-failedAndSchedule : msg -> error -> Remote.Remote error value -> ( Remote.Remote error value, Cmd msg )
-failedAndSchedule wakeup error remote =
-    Remote.fail error remote
-        |> Tuple.mapSecond (wakeAfter wakeup)
-
-{-| Schedules a message when a retry delay is present.
--}
-wakeAfter : msg -> Maybe Float -> Cmd msg
-wakeAfter message delay =
-    delay
-        |> Maybe.map
-            (\milliseconds ->
-                Process.sleep milliseconds
-                    |> Task.perform (always message)
-            )
-        |> Maybe.withDefault Cmd.none
 
 decide : PollError -> Decision.Decision
 decide error =
