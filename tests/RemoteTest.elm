@@ -26,7 +26,16 @@ policy =
 tests : Test
 tests =
     describe "Again.Remote"
-        [ test "success after retries can be lost and recovered without retaining the old value" <|
+        [ test "stateToString returns constructor names without payloads" <|
+            \_ ->
+                let
+                    context =
+                        { attempts = 2, lastError = "timeout" }
+                in
+                [ Attempting, WaitingForRetry context, Retrying context, Successful 42, Failed "denied" ]
+                    |> List.map Remote.stateToString
+                    |> Expect.equal [ "Attempting", "WaitingForRetry", "Retrying", "Successful", "Failed" ]
+        , test "success after retries can be lost and recovered without retaining the old value" <|
             \_ ->
                 let
                     connecting =

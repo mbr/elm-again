@@ -1,13 +1,13 @@
 module Again.Remote exposing
     ( Remote, State(..), RetryContext
-    , init, state, result, get
+    , init, state, stateToString, result, get
     , retry, ok, failed, failedWith
     )
 
 {-| Retry-aware state for a remote value.
 
 @docs Remote, State, RetryContext
-@docs init, state, result, get
+@docs init, state, stateToString, result, get
 @docs retry, ok, failed, failedWith
 
 -}
@@ -52,6 +52,27 @@ init policy =
 state : Remote error value -> State error value
 state (Remote _ current) =
     current
+
+
+{-| Returns the state constructor's name.
+-}
+stateToString : State error value -> String
+stateToString current =
+    case current of
+        Attempting ->
+            "Attempting"
+
+        WaitingForRetry _ ->
+            "WaitingForRetry"
+
+        Retrying _ ->
+            "Retrying"
+
+        Successful _ ->
+            "Successful"
+
+        Failed _ ->
+            "Failed"
 
 
 {-| Returns the success or terminal error, or `Nothing` while pending.
