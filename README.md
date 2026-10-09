@@ -51,6 +51,7 @@ type Msg
 init : ( Model, Cmd Msg )
 init =
     ( Remote.init (Policy.unlimited (Periodic { delay = 1000 }))
+        |> Remote.withRetryable decide
     , poll
     )
 
@@ -61,7 +62,7 @@ update msg model =
             ( Remote.succeed output model, Cmd.none )
 
         Received (Err error) ->
-            failedAndSchedule decide PollAgain error model
+            failedAndSchedule PollAgain error model
 
         PollAgain ->
             let
@@ -78,9 +79,9 @@ update msg model =
 
 {-| Records a failure and schedules a wakeup if another attempt is allowed.
 -}
-failedAndSchedule : (error -> Decision.Decision) -> msg -> error -> Remote.Remote error value -> ( Remote.Remote error value, Cmd msg )
-failedAndSchedule classify wakeup error remote =
-    Remote.failWith classify error remote
+failedAndSchedule : msg -> error -> Remote.Remote error value -> ( Remote.Remote error value, Cmd msg )
+failedAndSchedule wakeup error remote =
+    Remote.fail error remote
         |> Tuple.mapSecond (wakeAfter wakeup)
 
 {-| Schedules a message when a retry delay is present.

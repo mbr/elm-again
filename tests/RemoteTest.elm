@@ -147,14 +147,14 @@ tests =
                 in
                 Expect.all
                     [ \_ ->
-                        List.map Remote.beginRetry allStates
+                        List.map (Remote.beginRetry >> Tuple.mapFirst Remote.state) allStates
                             |> Expect.equal
-                                [ ( attempting, False )
-                                , ( retrying, True )
-                                , ( retrying, False )
-                                , ( successful, False )
-                                , ( rejected, False )
-                                , ( exhausted, False )
+                                [ ( Remote.state attempting, False )
+                                , ( Remote.state retrying, True )
+                                , ( Remote.state retrying, False )
+                                , ( Remote.state successful, False )
+                                , ( Remote.state rejected, False )
+                                , ( Remote.state exhausted, False )
                                 ]
                     , \_ ->
                         List.map (Remote.fail "new failure" >> Tuple.mapFirst Remote.state) allStates
@@ -170,8 +170,55 @@ tests =
                         List.map (Remote.failWith (always Stop) "denied again" >> Tuple.mapFirst Remote.state) allStates
                             |> Expect.equal (List.repeat 6 ( Failed "denied again", Nothing ))
                     , \_ ->
-                        List.map (Remote.succeed "replacement") allStates
-                            |> Expect.equal (List.repeat 6 (Remote.init policy |> Remote.succeed "replacement"))
+                        List.map (Remote.succeed "replacement" >> Remote.state) allStates
+                            |> Expect.equal (List.repeat 6 (Successful "replacement"))
+                    ]
+                    ()
+        , test "stored classifiers survive transitions, allow per-call overrides, and can be replaced without resetting state" <|
+            \_ ->
+                let
+                    classify error =
+                        if error == "denied" then
+                            Stop
+
+                        else
+                            RetryAfter 5000
+
+                    initial =
+                        Remote.init policy |> Remote.withRetryable classify
+
+                    ( waiting, firstDelay ) =
+                        Remote.fail "busy" initial
+
+                    ( waitingAgain, secondDelay ) =
+                        waiting |> Remote.beginRetry |> Tuple.first |> Remote.fail "busy"
+
+                    ( exhausted, finalDelay ) =
+                        waitingAgain |> Remote.beginRetry |> Tuple.first |> Remote.fail "busy"
+
+                    ( overridden, overrideDelay ) =
+                        waiting |> Remote.beginRetry |> Tuple.first |> Remote.failWith (always Retry) "denied"
+
+                    afterSuccess =
+                        overridden |> Remote.succeed "value" |> Remote.fail "denied"
+
+                    afterFailure =
+                        Remote.fail "busy" exhausted
+
+                    replaced =
+                        waiting |> Remote.withRetryable (always Retry)
+                in
+                Expect.all
+                    [ \_ -> Expect.equal [ Just 5000, Just 5000, Nothing ] [ firstDelay, secondDelay, finalDelay ]
+                    , \_ -> Expect.equal (Failed "busy") (Remote.state exhausted)
+                    , \_ -> Expect.equal ( WaitingForRetry { attempts = 2, lastError = "denied" }, Just 2000 ) ( Remote.state overridden, overrideDelay )
+                    , \_ -> Expect.equal ( Failed "denied", Nothing ) (Tuple.mapFirst Remote.state afterSuccess)
+                    , \_ -> Expect.equal ( WaitingForRetry { attempts = 1, lastError = "busy" }, Just 5000 ) (Tuple.mapFirst Remote.state afterFailure)
+                    , \_ -> Expect.equal (Remote.state waiting) (Remote.state replaced)
+                    , \_ ->
+                        Remote.fail "denied" replaced
+                            |> Tuple.mapFirst Remote.state
+                            |> Expect.equal ( WaitingForRetry { attempts = 2, lastError = "denied" }, Just 2000 )
                     ]
                     ()
         , test "the classifier receives each error and its decisions respect the policy" <|

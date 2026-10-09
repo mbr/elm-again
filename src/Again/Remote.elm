@@ -1,13 +1,13 @@
 module Again.Remote exposing
     ( Remote, State(..), RetryContext
-    , init, state, stateToString, result, get
+    , init, withRetryable, state, stateToString, result, get
     , beginRetry, succeed, fail, failWith
     )
 
 {-| Retry-aware state for a remote value.
 
 @docs Remote, State, RetryContext
-@docs init, state, stateToString, result, get
+@docs init, withRetryable, state, stateToString, result, get
 @docs beginRetry, succeed, fail, failWith
 
 -}
@@ -19,7 +19,7 @@ import Again.Policy exposing (Policy)
 {-| A value with retry state.
 -}
 type Remote error value
-    = Remote Policy (State error value)
+    = Remote Policy (error -> Decision) (State error value)
 
 
 {-| The current state of the remote value.
@@ -40,17 +40,24 @@ type alias RetryContext error =
     }
 
 
-{-| Creates a remote value in `Attempting` state.
+{-| Creates a remote value in `Attempting` state, classifying failures as `Decision.Retry`.
 -}
 init : Policy -> Remote error value
 init policy =
-    Remote policy Attempting
+    Remote policy (always Decision.Retry) Attempting
+
+
+{-| Replaces the error classifier without changing the current state.
+-}
+withRetryable : (error -> Decision) -> Remote error value -> Remote error value
+withRetryable classify (Remote policy _ current) =
+    Remote policy classify current
 
 
 {-| Inspects the current state.
 -}
 state : Remote error value -> State error value
-state (Remote _ current) =
+state (Remote _ _ current) =
     current
 
 
@@ -101,10 +108,10 @@ get =
 Other states return unchanged with `False`.
 -}
 beginRetry : Remote error value -> ( Remote error value, Bool )
-beginRetry ((Remote policy current) as remote) =
+beginRetry ((Remote policy classify current) as remote) =
     case current of
         WaitingForRetry context ->
-            ( Remote policy (Retrying context), True )
+            ( Remote policy classify (Retrying context), True )
 
         _ ->
             ( remote, False )
@@ -113,41 +120,42 @@ beginRetry ((Remote policy current) as remote) =
 {-| Stores a successful value and clears the retry context.
 -}
 succeed : value -> Remote error value -> Remote error value
-succeed value (Remote policy _) =
-    Remote policy (Successful value)
+succeed value (Remote policy classify _) =
+    Remote policy classify (Successful value)
 
 
-{-| Records a failure with `Decision.Retry`. Returns a delay in milliseconds,
-or `Nothing` if the attempt limit is reached.
+{-| Uses the stored classifier and policy. Returns a retry delay in milliseconds,
+or `Nothing` if no retry is allowed.
 -}
 fail : error -> Remote error value -> ( Remote error value, Maybe Float )
-fail =
-    failWith (always Decision.Retry)
+fail error ((Remote _ classify _) as remote) =
+    failWith classify error remote
 
 
-{-| Classifies a failure and applies the policy. Returns a retry delay in
+{-| Uses the supplied classifier for this failure only. Returns a retry delay in
 milliseconds, or `Nothing` if no retry is allowed.
 -}
 failWith : (error -> Decision) -> error -> Remote error value -> ( Remote error value, Maybe Float )
-failWith decide error (Remote policy current) =
+failWith decide error (Remote policy classify current) =
     let
-        decision =
-            decide error
+        attempts =
+            case current of
+                WaitingForRetry context ->
+                    context.attempts + 1
+
+                Retrying context ->
+                    context.attempts + 1
+
+                _ ->
+                    1
     in
-    case current of
-        WaitingForRetry context ->
-            failureOutcome decision error (context.attempts + 1) policy
-
-        Retrying context ->
-            failureOutcome decision error (context.attempts + 1) policy
-
-        _ ->
-            failureOutcome decision error 1 policy
+    failureOutcome (decide error) error attempts policy
+        |> Tuple.mapFirst (Remote policy classify)
 
 
 {-| Builds the next state and retry delay.
 -}
-failureOutcome : Decision -> error -> Int -> Policy -> ( Remote error value, Maybe Float )
+failureOutcome : Decision -> error -> Int -> Policy -> ( State error value, Maybe Float )
 failureOutcome decision error attempts policy =
     let
         delay =
@@ -161,4 +169,4 @@ failureOutcome decision error attempts policy =
                 Nothing ->
                     Failed error
     in
-    ( Remote policy next, delay )
+    ( next, delay )
