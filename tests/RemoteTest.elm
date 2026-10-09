@@ -155,6 +155,17 @@ tests =
                                 , Attempting
                                 ]
                     , \_ ->
+                        List.map Remote.retry allStates
+                            |> Expect.equal
+                                [ ( initial, False )
+                                , ( attempting, False )
+                                , ( retrying, True )
+                                , ( retrying, False )
+                                , ( successful, False )
+                                , ( stopped, False )
+                                , ( exhausted, False )
+                                ]
+                    , \_ ->
                         List.map (Remote.failed "new failure" >> Tuple.mapFirst Remote.state) allStates
                             |> Expect.equal
                                 [ ( WaitingForRetry { attempts = 1, lastError = "new failure" }, Just 1000 )
@@ -179,6 +190,31 @@ tests =
                             |> Expect.equal (List.repeat 7 (Remote.idle policy |> Remote.ok "replacement"))
                     ]
                     ()
+        , test "scheduled failures return updated state for retries and terminal errors" <|
+            \_ ->
+                let
+                    attempting =
+                        Remote.attempting policy
+
+                    waiting =
+                        Remote.failed "first failure" attempting |> Tuple.first
+
+                    lastAttempt =
+                        Remote.attempting { policy | limit = Policy.MaxAttempts 1 }
+                in
+                [ ( Retry, attempting ), ( Stop, attempting ), ( RetryAfter 1500, waiting ), ( Retry, lastAttempt ) ]
+                    |> List.map
+                        (\( decision, remote ) ->
+                            Remote.failedAndSchedule decision () "reported failure" remote
+                                |> Tuple.first
+                                |> Remote.state
+                        )
+                    |> Expect.equal
+                        [ WaitingForRetry { attempts = 1, lastError = "reported failure" }
+                        , Failed "reported failure"
+                        , WaitingForRetry { attempts = 2, lastError = "reported failure" }
+                        , Failed "reported failure"
+                        ]
         , test "decisions can stop or extend a wait but cannot exceed the attempt limit" <|
             \_ ->
                 let

@@ -5,7 +5,6 @@
     "license": "MIT",
     "version": "1.0.0",
     "exposed-modules": [
-        "Again",
         "Again.Decision",
         "Again.Http",
         "Again.Policy",

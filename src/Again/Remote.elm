@@ -1,21 +1,23 @@
 module Again.Remote exposing
     ( Remote, State(..), RetryContext
     , idle, attempting, state, result, get
-    , started, stopped, ok, failed, failedWith
+    , started, retry, stopped, ok, failed, failedWith, failedAndSchedule
     )
 
 {-| Track a value that can succeed, fail, and be retried.
 
-The caller runs attempts, schedules retries, and filters obsolete callbacks.
+The caller runs attempts and filters obsolete callbacks.
 
 @docs Remote, State, RetryContext
 @docs idle, attempting, state, result, get
-@docs started, stopped, ok, failed, failedWith
+@docs started, retry, stopped, ok, failed, failedWith, failedAndSchedule
 
 -}
 
 import Again.Decision as Decision exposing (Decision)
 import Again.Policy exposing (Policy)
+import Process
+import Task
 
 
 {-| A value with retry state.
@@ -125,6 +127,22 @@ started (Remote policy current) =
             Remote policy Attempting
 
 
+{-| Marks a pending retry as running.
+
+Returns `True` when moving from `WaitingForRetry` to `Retrying`.
+Other states are unchanged and return `False`.
+
+-}
+retry : Remote error value -> ( Remote error value, Bool )
+retry ((Remote policy current) as remote) =
+    case current of
+        WaitingForRetry context ->
+            ( Remote policy (Retrying context), True )
+
+        _ ->
+            ( remote, False )
+
+
 {-| Records that attempts have stopped.
 
 Returns to `Idle`, keeping the policy but discarding any value, error, and attempt count.
@@ -177,6 +195,17 @@ failedWith decision error (Remote policy current) =
             recordFailure decision error 1 policy
 
 
+{-| Records a failure and schedules a wakeup message when retrying.
+
+Returns `Cmd.none` when retrying is stopped or exhausted.
+
+-}
+failedAndSchedule : Decision -> msg -> error -> Remote error value -> ( Remote error value, Cmd msg )
+failedAndSchedule decision wakeup error remote =
+    failedWith decision error remote
+        |> Tuple.mapSecond (wakeAfter wakeup)
+
+
 {-| Builds the next state and retry delay.
 -}
 recordFailure : Decision -> error -> Int -> Policy -> ( Remote error value, Maybe Float )
@@ -194,3 +223,16 @@ recordFailure decision error attempts policy =
                     Failed error
     in
     ( Remote policy next, delay )
+
+
+{-| Schedules a message when a retry delay is present.
+-}
+wakeAfter : msg -> Maybe Float -> Cmd msg
+wakeAfter message delay =
+    delay
+        |> Maybe.map
+            (\milliseconds ->
+                Process.sleep milliseconds
+                    |> Task.perform (always message)
+            )
+        |> Maybe.withDefault Cmd.none

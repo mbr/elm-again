@@ -29,7 +29,6 @@ Use this when each attempt needs to update your model, rather than waiting for a
 Suppose you've submitted a job. Its status endpoint returns `202 Accepted` with progress text while running, `200 OK` with the result when complete, or an error such as `404`. Poll the status endpoint without submitting the job again:
 
 ```elm
-import Again
 import Again.Decision as Decision
 import Again.Policy as Policy
 import Again.Remote as Remote
@@ -60,16 +59,20 @@ update msg model =
             ( Remote.ok output model, Cmd.none )
 
         Received (Err error) ->
-            Remote.failedWith (decide error) error model
-                |> Tuple.mapSecond (Again.wakeAfter PollAgain)
+            Remote.failedAndSchedule (decide error) PollAgain error model
 
         PollAgain ->
-            case Remote.state model of
-                Remote.WaitingForRetry _ ->
-                    ( Remote.started model, poll )
+            let
+                ( next, shouldRetry ) =
+                    Remote.retry model
+            in
+            ( next
+            , if shouldRetry then
+                poll
 
-                _ ->
-                    ( model, Cmd.none )
+              else
+                Cmd.none
+            )
 
 decide : PollError -> Decision.Decision
 decide error =
