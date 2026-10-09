@@ -9,9 +9,17 @@ module Again.Decision exposing (Decision(..), shouldRetry, retryDelay)
 import Again.Policy as Policy exposing (Policy)
 
 
-{-| `Stop` returns the error. `Retry` uses the policy's delay. `RetryAfter` waits
-at least the given number of milliseconds, using a finite, nonnegative value.
+{-| Describes a decision made to retry an action.
+
+`Stop` returns the error.
+
+`Retry` uses the policy's delay.
+
+`RetryAfter` waits at least the given number of milliseconds, using a finite,
+nonnegative value.
+
 Both retry decisions remain subject to the policy's attempt limit.
+
 -}
 type Decision
     = Stop
