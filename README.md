@@ -34,6 +34,8 @@ import Again.Policy as Policy
 import Again.Remote as Remote
 import Again.Schedule exposing (Schedule(..))
 import Http
+import Process
+import Task
 
 type PollError
     = NotReady String
@@ -59,7 +61,7 @@ update msg model =
             ( Remote.ok output model, Cmd.none )
 
         Received (Err error) ->
-            Remote.failedAndSchedule (decide error) PollAgain error model
+            failedAndSchedule (decide error) PollAgain error model
 
         PollAgain ->
             let
@@ -73,6 +75,25 @@ update msg model =
               else
                 Cmd.none
             )
+
+{-| Records a failure and schedules a wakeup if another attempt is allowed.
+-}
+failedAndSchedule : Decision.Decision -> msg -> error -> Remote.Remote error value -> ( Remote.Remote error value, Cmd msg )
+failedAndSchedule decision wakeup error remote =
+    Remote.failedWith decision error remote
+        |> Tuple.mapSecond (wakeAfter wakeup)
+
+{-| Schedules a message when a retry delay is present.
+-}
+wakeAfter : msg -> Maybe Float -> Cmd msg
+wakeAfter message delay =
+    delay
+        |> Maybe.map
+            (\milliseconds ->
+                Process.sleep milliseconds
+                    |> Task.perform (always message)
+            )
+        |> Maybe.withDefault Cmd.none
 
 decide : PollError -> Decision.Decision
 decide error =

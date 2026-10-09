@@ -165,31 +165,6 @@ tests =
                             |> Expect.equal (List.repeat 6 (Remote.init policy |> Remote.ok "replacement"))
                     ]
                     ()
-        , test "scheduled failures return updated state for retries and terminal errors" <|
-            \_ ->
-                let
-                    attempting =
-                        Remote.init policy
-
-                    waiting =
-                        Remote.failed "first failure" attempting |> Tuple.first
-
-                    lastAttempt =
-                        Remote.init { policy | limit = Policy.MaxAttempts 1 }
-                in
-                [ ( Retry, attempting ), ( Stop, attempting ), ( RetryAfter 1500, waiting ), ( Retry, lastAttempt ) ]
-                    |> List.map
-                        (\( decision, remote ) ->
-                            Remote.failedAndSchedule decision () "reported failure" remote
-                                |> Tuple.first
-                                |> Remote.state
-                        )
-                    |> Expect.equal
-                        [ WaitingForRetry { attempts = 1, lastError = "reported failure" }
-                        , Failed "reported failure"
-                        , WaitingForRetry { attempts = 2, lastError = "reported failure" }
-                        , Failed "reported failure"
-                        ]
         , test "decisions can stop or extend a wait but cannot exceed the attempt limit" <|
             \_ ->
                 let

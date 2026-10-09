@@ -1,24 +1,22 @@
 module Again.Remote exposing
     ( Remote, State(..), RetryContext
     , init, state, result, get
-    , retry, ok, failed, failedWith, failedAndSchedule
+    , retry, ok, failed, failedWith
     )
 
 {-| Track an operation's value and retries, beginning with its initial attempt.
 
-The caller runs attempts and filters obsolete callbacks. Discard the remote to
-abandon tracking; this does not cancel pending effects.
+The caller runs attempts, schedules retries, and filters obsolete callbacks.
+Discard the remote to abandon tracking; this does not cancel pending effects.
 
 @docs Remote, State, RetryContext
 @docs init, state, result, get
-@docs retry, ok, failed, failedWith, failedAndSchedule
+@docs retry, ok, failed, failedWith
 
 -}
 
 import Again.Decision as Decision exposing (Decision)
 import Again.Policy exposing (Policy)
-import Process
-import Task
 
 
 {-| A value with retry state.
@@ -158,17 +156,6 @@ failedWith decision error (Remote policy current) =
             recordFailure decision error 1 policy
 
 
-{-| Records a failure and schedules a wakeup message when retrying.
-
-Returns `Cmd.none` when retrying is stopped or exhausted.
-
--}
-failedAndSchedule : Decision -> msg -> error -> Remote error value -> ( Remote error value, Cmd msg )
-failedAndSchedule decision wakeup error remote =
-    failedWith decision error remote
-        |> Tuple.mapSecond (wakeAfter wakeup)
-
-
 {-| Builds the next state and retry delay.
 -}
 recordFailure : Decision -> error -> Int -> Policy -> ( Remote error value, Maybe Float )
@@ -186,16 +173,3 @@ recordFailure decision error attempts policy =
                     Failed error
     in
     ( Remote policy next, delay )
-
-
-{-| Schedules a message when a retry delay is present.
--}
-wakeAfter : msg -> Maybe Float -> Cmd msg
-wakeAfter message delay =
-    delay
-        |> Maybe.map
-            (\milliseconds ->
-                Process.sleep milliseconds
-                    |> Task.perform (always message)
-            )
-        |> Maybe.withDefault Cmd.none
