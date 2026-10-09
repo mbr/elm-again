@@ -30,7 +30,7 @@ tests =
             \_ ->
                 let
                     initial =
-                        Remote.notAttempted policy
+                        Remote.idle policy
 
                     connecting =
                         Remote.attempting policy
@@ -60,7 +60,7 @@ tests =
                     [ \_ ->
                         List.map Remote.state states
                             |> Expect.equal
-                                [ NotAttempted
+                                [ Idle
                                 , Attempting
                                 , WaitingForRetry { attempts = 1, lastError = "timeout" }
                                 , Retrying { attempts = 1, lastError = "timeout" }
@@ -101,7 +101,7 @@ tests =
                                     in
                                     ( next, previousDelays ++ [ delay ] )
                                 )
-                                ( Remote.notAttempted { schedule = Periodic { delay = 1000 }, limit = Policy.MaxAttempts limit }, [] )
+                                ( Remote.idle { schedule = Periodic { delay = 1000 }, limit = Policy.MaxAttempts limit }, [] )
                 in
                 Expect.all
                     [ \_ -> Expect.equal (List.repeat (attempts - 1) (Just 1000) ++ [ Nothing ]) delays
@@ -110,11 +110,11 @@ tests =
                     , \_ -> Expect.equal Nothing (Remote.get exhausted)
                     ]
                     ()
-        , test "starts and outcomes apply from every state, preserving only active retry context" <|
+        , test "starts, stops, and outcomes apply from every state, preserving only active retry context" <|
             \_ ->
                 let
                     initial =
-                        Remote.notAttempted policy
+                        Remote.idle policy
 
                     attempting =
                         Remote.started initial
@@ -169,8 +169,14 @@ tests =
                         List.map (Remote.failedWith Stop "denied again" >> Tuple.mapFirst Remote.state) allStates
                             |> Expect.equal (List.repeat 7 ( Failed "denied again", Nothing ))
                     , \_ ->
+                        List.map Remote.stopped allStates
+                            |> Expect.equal (List.repeat 7 initial)
+                    , \_ ->
+                        List.map (Remote.stopped >> Remote.started >> Remote.failed "restarted" >> Tuple.mapFirst Remote.state) allStates
+                            |> Expect.equal (List.repeat 7 ( WaitingForRetry { attempts = 1, lastError = "restarted" }, Just 1000 ))
+                    , \_ ->
                         List.map (Remote.ok "replacement") allStates
-                            |> Expect.equal (List.repeat 7 (Remote.notAttempted policy |> Remote.ok "replacement"))
+                            |> Expect.equal (List.repeat 7 (Remote.idle policy |> Remote.ok "replacement"))
                     ]
                     ()
         , test "decisions can stop or extend a wait but cannot exceed the attempt limit" <|

@@ -1,7 +1,7 @@
 module Again.Remote exposing
     ( Remote, State(..), RetryContext
-    , notAttempted, attempting, state, result, get
-    , started, ok, failed, failedWith
+    , idle, attempting, state, result, get
+    , started, stopped, ok, failed, failedWith
     )
 
 {-| Track a value that can succeed, fail, and be retried.
@@ -9,8 +9,8 @@ module Again.Remote exposing
 The caller runs attempts, schedules retries, and filters obsolete callbacks.
 
 @docs Remote, State, RetryContext
-@docs notAttempted, attempting, state, result, get
-@docs started, ok, failed, failedWith
+@docs idle, attempting, state, result, get
+@docs started, stopped, ok, failed, failedWith
 
 -}
 
@@ -26,7 +26,7 @@ type Remote error value
 
 {-| The current state of the value.
 
-`NotAttempted` means no attempt has started.
+`Idle` means no attempt is active or scheduled.
 
 `Attempting` is the first attempt in flight.
 
@@ -40,7 +40,7 @@ type Remote error value
 
 -}
 type State error value
-    = NotAttempted
+    = Idle
     | Attempting
     | WaitingForRetry (RetryContext error)
     | Retrying (RetryContext error)
@@ -61,11 +61,11 @@ type alias RetryContext error =
     }
 
 
-{-| Creates a value in `NotAttempted` state.
+{-| Creates a value in `Idle` state.
 -}
-notAttempted : Policy -> Remote error value
-notAttempted policy =
-    Remote policy NotAttempted
+idle : Policy -> Remote error value
+idle policy =
+    Remote policy Idle
 
 
 {-| Creates a value in `Attempting` state.
@@ -123,6 +123,16 @@ started (Remote policy current) =
 
         _ ->
             Remote policy Attempting
+
+
+{-| Records that attempts have stopped.
+
+Returns to `Idle`, keeping the policy but discarding any value, error, and attempt count.
+
+-}
+stopped : Remote error value -> Remote error value
+stopped (Remote policy _) =
+    idle policy
 
 
 {-| Records success.

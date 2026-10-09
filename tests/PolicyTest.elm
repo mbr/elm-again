@@ -14,10 +14,10 @@ import Test exposing (Test, describe, test)
 tests : Test
 tests =
     describe "Again.Policy"
-        [ test "the default policy permits retries regardless of attempts already made" <|
+        [ test "unlimited policies permit retries regardless of attempts already made" <|
             \_ ->
                 [ 1, 2, 100000 ]
-                    |> List.map (Policy.allowsRetry (Policy.init Schedule.immediately))
+                    |> List.map (Policy.allowsRetry (Policy.unlimited Schedule.immediately))
                     |> Expect.equal [ True, True, True ]
         , test "three attempts permit two retries; limits of one or less permit none" <|
             \_ ->
