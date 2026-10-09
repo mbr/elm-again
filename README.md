@@ -4,22 +4,52 @@ Retries for tasks and manually managed values, support exponential backoff.
 
 ## `Again.Task`
 
-Retry an existing task up to three times, waiting a second between attempts:
+Fetch `/message.txt` with up to three attempts, retrying transient HTTP failures. `ReceivedMessage` carries the final result to `update`.
 
 ```elm
+import Again.Http
 import Again.Policy as Policy
 import Again.Schedule exposing (Schedule(..))
 import Again.Task
-import Task exposing (Task)
+import Http
+import Task
 
-run : Task error value -> Cmd (Result error value)
-run task =
-    task
-        |> Again.Task.retry
+type Msg
+    = ReceivedMessage (Result Http.Error String)
+
+loadMessage : Cmd Msg
+loadMessage =
+    Http.task
+        { method = "GET"
+        , headers = []
+        , url = "/message.txt"
+        , body = Http.emptyBody
+        , resolver = Http.stringResolver resolveString
+        , timeout = Just 5000
+        }
+        |> Again.Task.retryIf Again.Http.isRetryable
             { schedule = Periodic { delay = 1000 }
             , limit = Policy.MaxAttempts 3
             }
-        |> Task.attempt identity
+        |> Task.attempt ReceivedMessage
+
+resolveString : Http.Response String -> Result Http.Error String
+resolveString response =
+    case response of
+        Http.GoodStatus_ _ body ->
+            Ok body
+
+        Http.BadUrl_ url ->
+            Err (Http.BadUrl url)
+
+        Http.Timeout_ ->
+            Err Http.Timeout
+
+        Http.NetworkError_ ->
+            Err Http.NetworkError
+
+        Http.BadStatus_ metadata _ ->
+            Err (Http.BadStatus metadata.statusCode)
 ```
 
 ## `Again.Remote`
