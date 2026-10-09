@@ -90,7 +90,7 @@ state (Remote _ _ current) =
 
 
 {-| Describe your remote value with a readable label, such as
-`"waiting to retry (attempt 2/3)"`. Unlimited policies leave out the total.
+`"waiting to retry (attempt 2/3)"`.
 -}
 stateToString : Remote error value -> String
 stateToString (Remote policy _ current) =
