@@ -6,7 +6,7 @@ module Again.Remote exposing
 
 {-| Track an operation's value and retries, beginning with its initial attempt.
 
-The caller runs attempts, schedules retries, and filters obsolete callbacks.
+The caller runs attempts and schedules retries.
 Discard the remote to abandon tracking; this does not cancel pending effects.
 
 @docs Remote, State, RetryContext
