@@ -13,7 +13,7 @@ module Again.Remote exposing
 -}
 
 import Again.Decision as Decision exposing (Decision)
-import Again.Policy exposing (Policy)
+import Again.Policy as Policy exposing (Policy)
 
 
 {-| A value with retry state.
@@ -62,18 +62,19 @@ state (Remote _ _ current) =
 
 
 {-| Describes the state with its current or upcoming attempt number.
+Includes the total for bounded policies.
 -}
-stateToString : State error value -> String
-stateToString current =
+stateToString : Remote error value -> String
+stateToString (Remote policy _ current) =
     case current of
         Attempting ->
-            "attempting" ++ attemptLabel 1
+            "attempting" ++ attemptLabel policy 1
 
         WaitingForRetry context ->
-            "waiting to retry" ++ attemptLabel (context.attempts + 1)
+            "waiting to retry" ++ attemptLabel policy (context.attempts + 1)
 
         Retrying context ->
-            "retrying" ++ attemptLabel (context.attempts + 1)
+            "retrying" ++ attemptLabel policy (context.attempts + 1)
 
         Successful _ ->
             "successful"
@@ -82,11 +83,17 @@ stateToString current =
             "failed"
 
 
-{-| Formats an attempt number.
+{-| Formats an attempt number and optional total.
 -}
-attemptLabel : Int -> String
-attemptLabel attempt =
-    " (attempt " ++ String.fromInt attempt ++ ")"
+attemptLabel : Policy -> Int -> String
+attemptLabel policy attempt =
+    let
+        total =
+            Policy.attemptsLeft policy attempt
+                |> Maybe.map (\remaining -> "/" ++ String.fromInt (attempt + remaining))
+                |> Maybe.withDefault ""
+    in
+    " (attempt " ++ String.fromInt attempt ++ total ++ ")"
 
 
 {-| Returns the success or terminal error, or `Nothing` while pending.

@@ -26,15 +26,59 @@ policy =
 tests : Test
 tests =
     describe "Again.Remote"
-        [ test "stateToString labels current and upcoming attempts" <|
+        [ test "stateToString describes bounded and unlimited retry attempts" <|
             \_ ->
                 let
-                    context =
-                        { attempts = 2, lastError = "timeout" }
+                    labels limit =
+                        let
+                            initial =
+                                Remote.init { policy | limit = limit }
+
+                            waiting =
+                                Remote.fail "timeout" initial |> Tuple.first
+
+                            retrying =
+                                Remote.beginRetry waiting |> Tuple.first
+
+                            waitingAgain =
+                                Remote.fail "timeout" retrying |> Tuple.first
+
+                            retryingAgain =
+                                Remote.beginRetry waitingAgain |> Tuple.first
+
+                            successful =
+                                Remote.succeed 42 retryingAgain
+
+                            rejected =
+                                initial |> Remote.withRetryable (always Stop) |> Remote.fail "denied" |> Tuple.first
+                        in
+                        [ initial, waiting, retrying, waitingAgain, retryingAgain, successful, rejected ]
+                            |> List.map Remote.stateToString
                 in
-                [ Attempting, WaitingForRetry context, Retrying context, Successful 42, Failed "denied" ]
-                    |> List.map Remote.stateToString
-                    |> Expect.equal [ "attempting (attempt 1)", "waiting to retry (attempt 3)", "retrying (attempt 3)", "successful", "failed" ]
+                List.map labels [ Policy.MaxAttempts 3, Policy.Unlimited ]
+                    |> Expect.equal
+                        [ [ "attempting (attempt 1/3)"
+                          , "waiting to retry (attempt 2/3)"
+                          , "retrying (attempt 2/3)"
+                          , "waiting to retry (attempt 3/3)"
+                          , "retrying (attempt 3/3)"
+                          , "successful"
+                          , "failed"
+                          ]
+                        , [ "attempting (attempt 1)"
+                          , "waiting to retry (attempt 2)"
+                          , "retrying (attempt 2)"
+                          , "waiting to retry (attempt 3)"
+                          , "retrying (attempt 3)"
+                          , "successful"
+                          , "failed"
+                          ]
+                        ]
+        , test "stateToString includes the initial attempt for limits of one or less" <|
+            \_ ->
+                [ 1, 0, -1 ]
+                    |> List.map (\limit -> Remote.init { policy | limit = Policy.MaxAttempts limit } |> Remote.stateToString)
+                    |> Expect.equal (List.repeat 3 "attempting (attempt 1/1)")
         , test "success after retries can be lost and recovered without retaining the old value" <|
             \_ ->
                 let
