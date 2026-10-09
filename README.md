@@ -54,11 +54,9 @@ resolveString response =
 
 ## `Again.Remote`
 
-A successful `Remote` can later fail, such as a connection that closes. `fail` discards the value and restarts the failure count at one, using the stored classifier and policy. Each attempt can update your model rather than waiting for a task's final result.
+A successful `Remote` can later fail, such as a connection that closes.
 
-The `Again.Remote.Cmd` helpers take care of scheduling retry messages.
-
-Suppose you've submitted a job. Its status endpoint returns `202 Accepted` with progress text while running, `200 OK` with the result when complete, or an error such as `404`. Poll the status endpoint without submitting the job again:
+Poll a submitted job: retry on `202 Accepted`, finish on `200 OK`, and stop on other responses:
 
 ```elm
 import Again.Decision as Decision
@@ -131,5 +129,3 @@ readStatus response =
         _ ->
             Err (RequestFailed response)
 ```
-
-`202` is a successful HTTP response, but the job's result isn't ready, so it becomes `NotReady progress`. Each response reaches `update`; the progress text remains in `lastError` while waiting and retrying. The view can inspect `Remote.state model` to display it. On completion, `Remote.get model` returns the result.
