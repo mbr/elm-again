@@ -20,4 +20,6 @@ firstRetryDelay =
 
 Use `Again.Task.retry policy task` to retry any failure, or `Again.Task.retryIf isTransient policy task` to choose which errors to retry. Both return a task that succeeds with the result or fails with the last error.
 
+Use `Again.Remote` to track a value's retry lifecycle while managing commands and callbacks yourself.
+
 Develop with `nix develop`, then `./format.sh` and `./check.sh`. `nix build` runs the same checks in a sandbox. Refresh pinned Elm dependencies with `./update-deps.sh`.

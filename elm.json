@@ -8,6 +8,7 @@
         "Again.Decision",
         "Again.Http",
         "Again.Policy",
+        "Again.Remote",
         "Again.Schedule",
         "Again.Task"
     ],
