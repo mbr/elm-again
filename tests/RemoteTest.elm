@@ -38,13 +38,13 @@ tests =
                                 Remote.fail "timeout" initial |> Tuple.first
 
                             retrying =
-                                Remote.beginRetry waiting |> Tuple.first
+                                Remote.beginRetry waiting
 
                             waitingAgain =
                                 Remote.fail "timeout" retrying |> Tuple.first
 
                             retryingAgain =
-                                Remote.beginRetry waitingAgain |> Tuple.first
+                                Remote.beginRetry waitingAgain
 
                             successful =
                                 Remote.succeed 42 retryingAgain
@@ -89,13 +89,13 @@ tests =
                         Remote.fail "timeout" connecting
 
                     retrying =
-                        Remote.beginRetry waiting |> Tuple.first
+                        Remote.beginRetry waiting
 
                     ( waitingAgain, secondDelay ) =
                         Remote.fail "refused" retrying
 
                     connected =
-                        waitingAgain |> Remote.beginRetry |> Tuple.first |> Remote.succeed "socket"
+                        waitingAgain |> Remote.beginRetry |> Remote.succeed "socket"
 
                     ( lost, resetDelay ) =
                         Remote.fail "closed" connected
@@ -175,7 +175,7 @@ tests =
                                         ( next, delay ) =
                                             current
                                                 |> (if reportRetries then
-                                                        Remote.beginRetry >> Tuple.first
+                                                        Remote.beginRetry
 
                                                     else
                                                         identity
@@ -193,7 +193,7 @@ tests =
                     , \_ -> Expect.equal Nothing (Remote.get exhausted)
                     ]
                     ()
-        , test "retries require a waiting state while outcomes can be recorded from any state" <|
+        , test "beginRetry starts an attempt from any state and preserves retry context" <|
             \_ ->
                 let
                     attempting =
@@ -203,7 +203,7 @@ tests =
                         Remote.fail "timeout" attempting |> Tuple.first
 
                     retrying =
-                        Remote.beginRetry waiting |> Tuple.first
+                        Remote.beginRetry waiting
 
                     successful =
                         Remote.succeed "socket" retrying
@@ -216,7 +216,6 @@ tests =
                             |> Remote.fail "refused"
                             |> Tuple.first
                             |> Remote.beginRetry
-                            |> Tuple.first
                             |> Remote.fail "unavailable"
                             |> Tuple.first
 
@@ -225,17 +224,17 @@ tests =
                 in
                 Expect.all
                     [ \_ ->
-                        List.map (Remote.beginRetry >> Tuple.mapFirst Remote.state) allStates
+                        List.map (Remote.beginRetry >> Remote.state) allStates
                             |> Expect.equal
-                                [ ( Remote.state attempting, False )
-                                , ( Remote.state retrying, True )
-                                , ( Remote.state retrying, False )
-                                , ( Remote.state successful, False )
-                                , ( Remote.state rejected, False )
-                                , ( Remote.state exhausted, False )
+                                [ Attempting
+                                , Retrying { attempts = 1, lastError = "timeout" }
+                                , Retrying { attempts = 1, lastError = "timeout" }
+                                , Attempting
+                                , Attempting
+                                , Attempting
                                 ]
                     , \_ ->
-                        List.map (Remote.fail "new failure" >> Tuple.mapFirst Remote.state) allStates
+                        List.map (Remote.beginRetry >> Remote.fail "new failure" >> Tuple.mapFirst Remote.state) allStates
                             |> Expect.equal
                                 [ ( WaitingForRetry { attempts = 1, lastError = "new failure" }, Just 1000 )
                                 , ( WaitingForRetry { attempts = 2, lastError = "new failure" }, Just 2000 )
@@ -269,10 +268,10 @@ tests =
                         Remote.fail "busy" initial
 
                     ( waitingAgain, secondDelay ) =
-                        waiting |> Remote.beginRetry |> Tuple.first |> Remote.fail "busy"
+                        waiting |> Remote.beginRetry |> Remote.fail "busy"
 
                     ( exhausted, finalDelay ) =
-                        waitingAgain |> Remote.beginRetry |> Tuple.first |> Remote.fail "busy"
+                        waitingAgain |> Remote.beginRetry |> Remote.fail "busy"
 
                     afterSuccess =
                         waitingAgain |> Remote.succeed "value" |> Remote.fail "denied"
@@ -319,10 +318,10 @@ tests =
                         Remote.fail "busy" attempting
 
                     ( waitingAgain, secondDelay ) =
-                        waiting |> Remote.beginRetry |> Tuple.first |> Remote.fail "still busy"
+                        waiting |> Remote.beginRetry |> Remote.fail "still busy"
 
                     exhausted =
-                        waitingAgain |> Remote.beginRetry |> Tuple.first |> Remote.fail "unavailable"
+                        waitingAgain |> Remote.beginRetry |> Remote.fail "unavailable"
 
                     stopped =
                         Remote.fail "denied" attempting

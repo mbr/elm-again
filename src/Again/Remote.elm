@@ -4,8 +4,10 @@ module Again.Remote exposing
     , beginRetry, succeed, fail
     )
 
-{-| Retry-aware state for a remote value. A successful value can later fail and
-be retried, such as a connection that closes.
+{-| Keep track of a remote value and retry it when things go wrong.
+
+A successful value can fail later. For example, a connection may close after it
+has opened.
 
 @docs Remote, State, RetryContext
 @docs init, withRetryable, state, stateToString, result, get
@@ -17,13 +19,13 @@ import Again.Decision as Decision exposing (Decision)
 import Again.Policy as Policy exposing (Policy)
 
 
-{-| A value with retry state.
+{-| A remote value together with its retry policy and error classifier.
 -}
 type Remote error value
     = Remote Policy (error -> Decision) (State error value)
 
 
-{-| The current state of the remote value.
+{-| See whether your value is available, still being attempted, or has failed.
 -}
 type State error value
     = Attempting
@@ -33,7 +35,7 @@ type State error value
     | Failed error
 
 
-{-| The number of completed attempts and the most recent error.
+{-| The number of completed attempts and the latest error in a retry sequence.
 -}
 type alias RetryContext error =
     { attempts : Int
@@ -41,29 +43,31 @@ type alias RetryContext error =
     }
 
 
-{-| Creates a remote value in `Attempting` state, classifying failures as `Decision.Retry`.
+{-| Start tracking a value with its first attempt already under way. By default,
+all failures are retryable, subject to your policy.
 -}
 init : Policy -> Remote error value
 init policy =
     Remote policy (always Decision.Retry) Attempting
 
 
-{-| Replaces the error classifier without changing the current state.
+{-| Choose which errors should be retried. Changing the classifier leaves your
+current value and retry progress alone.
 -}
 withRetryable : (error -> Decision) -> Remote error value -> Remote error value
 withRetryable classify (Remote policy _ current) =
     Remote policy classify current
 
 
-{-| Inspects the current state.
+{-| Look at the current state of your remote value.
 -}
 state : Remote error value -> State error value
 state (Remote _ _ current) =
     current
 
 
-{-| Describes the state with its current or upcoming attempt number.
-Includes the total for bounded policies.
+{-| Describe your remote value with a readable label, such as
+`"waiting to retry (attempt 2/3)"`. Unlimited policies leave out the total.
 -}
 stateToString : Remote error value -> String
 stateToString (Remote policy _ current) =
@@ -84,7 +88,7 @@ stateToString (Remote policy _ current) =
             "failed"
 
 
-{-| Formats an attempt number and optional total.
+{-| Build the attempt label, including a total when the policy has a limit.
 -}
 attemptLabel : Policy -> Int -> String
 attemptLabel policy attempt =
@@ -97,7 +101,8 @@ attemptLabel policy attempt =
     " (attempt " ++ String.fromInt attempt ++ total ++ ")"
 
 
-{-| Returns the success or terminal error, or `Nothing` while pending.
+{-| Get the successful value or the error that ended the retry sequence.
+You get `Nothing` while an attempt or retry is pending.
 -}
 result : Remote error value -> Maybe (Result error value)
 result remote =
@@ -112,36 +117,47 @@ result remote =
             Nothing
 
 
-{-| Returns a value only while `Successful`.
+{-| Get the value if it is currently successful.
 -}
 get : Remote error value -> Maybe value
 get =
     result >> Maybe.andThen Result.toMaybe
 
 
-{-| Moves `WaitingForRetry` to `Retrying`, returning `True` if changed.
-Other states return unchanged with `False`.
+{-| Tell the `Remote` value that the wait time has elapsed. It will assume you
+are actually retrying afterwards.
+
+This keeps your retry context, if any. Otherwise you start a fresh attempt,
+so any previous value or error is discarded.
+
 -}
-beginRetry : Remote error value -> ( Remote error value, Bool )
+beginRetry : Remote error value -> Remote error value
 beginRetry ((Remote policy classify current) as remote) =
     case current of
         WaitingForRetry context ->
-            ( Remote policy classify (Retrying context), True )
+            Remote policy classify (Retrying context)
+
+        Retrying _ ->
+            remote
 
         _ ->
-            ( remote, False )
+            Remote policy classify Attempting
 
 
-{-| Stores a successful value and clears the retry context.
+{-| Tell the `Remote` that an attempt succeeded. This keeps the value and clears
+its previous failures and attempt count.
 -}
 succeed : value -> Remote error value -> Remote error value
 succeed value (Remote policy classify _) =
     Remote policy classify (Successful value)
 
 
-{-| Records a failure using the stored classifier and policy.
-Failing a `Successful` value discards it and restarts the failure count at one.
-Returns a retry delay in milliseconds, or `Nothing` if no retry is allowed.
+{-| Tell the `Remote` that an attempt failed, or that a successful value was lost.
+The stored classifier and policy decide whether to retry.
+
+You get a retry delay in milliseconds, or `Nothing` to give up. A failure after
+success discards the value and starts counting failures from one again.
+
 -}
 fail : error -> Remote error value -> ( Remote error value, Maybe Float )
 fail error (Remote policy classify current) =
@@ -161,7 +177,7 @@ fail error (Remote policy classify current) =
         |> Tuple.mapFirst (Remote policy classify)
 
 
-{-| Builds the next state and retry delay.
+{-| Work out whether to wait for another attempt or keep the final error.
 -}
 failureOutcome : Decision -> error -> Int -> Policy -> ( State error value, Maybe Float )
 failureOutcome decision error attempts policy =

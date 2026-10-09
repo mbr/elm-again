@@ -65,17 +65,7 @@ update msg model =
             failedAndSchedule PollAgain error model
 
         PollAgain ->
-            let
-                ( next, shouldRetry ) =
-                    Remote.beginRetry model
-            in
-            ( next
-            , if shouldRetry then
-                poll
-
-              else
-                Cmd.none
-            )
+            ( Remote.beginRetry model, poll )
 
 {-| Records a failure and schedules a wakeup if another attempt is allowed.
 -}
