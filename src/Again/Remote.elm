@@ -6,28 +6,54 @@ module Again.Remote exposing
 
 {-| Keep track of a remote value and retry it when things go wrong.
 
-Create a `Remote` with a retry policy, then report each outcome with `fail` or
-`succeed`:
+Suppose your operation reports a `Result` through a message:
+
+    attempt : (Result String String -> msg) -> Cmd msg
+
+You can track it in your model and schedule retries from `update`:
 
     import Again.Policy as Policy
     import Again.Remote as Remote
     import Again.Schedule exposing (Schedule(..))
+    import Process
+    import Task
 
-    initial =
-        Remote.init (Policy.unlimited (Periodic { delay = 1000 }))
+    type alias Model =
+        Remote.Remote String String
 
-    failure =
-        Remote.fail "timeout" initial
+    type Msg
+        = Received (Result String String)
+        | Retry
 
-    retrying =
-        Remote.beginRetry (Tuple.first failure)
+    init : () -> ( Model, Cmd Msg )
+    init _ =
+        ( Remote.init (Policy.unlimited (Periodic { delay = 1000 }))
+        , attempt Received
+        )
 
-    ready =
-        Remote.succeed "hello" retrying
+    update : Msg -> Model -> ( Model, Cmd Msg )
+    update msg model =
+        case msg of
+            Received (Ok value) ->
+                ( Remote.succeed value model, Cmd.none )
 
-The second value in `failure` is `Just 1000`. Wait that many milliseconds before
-calling `beginRetry` and trying again. After success, `Remote.get ready` gives
-you `Just "hello"`.
+            Received (Err error) ->
+                let
+                    ( next, delay ) =
+                        Remote.fail error model
+                in
+                ( next
+                , case delay of
+                    Just milliseconds ->
+                        Process.sleep milliseconds
+                            |> Task.perform (always Retry)
+
+                    Nothing ->
+                        Cmd.none
+                )
+
+            Retry ->
+                ( Remote.beginRetry model, attempt Received )
 
 A successful value can fail later. For example, a connection may close after it
 has opened.
