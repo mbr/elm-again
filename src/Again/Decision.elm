@@ -1,8 +1,8 @@
-module Again.Decision exposing (Decision(..), shouldRetry, retryDelay)
+module Again.Decision exposing (Decision(..), fromBool, shouldRetry, retryDelay)
 
 {-| Decide whether to retry a failure, optionally requesting a minimum wait.
 
-@docs Decision, shouldRetry, retryDelay
+@docs Decision, fromBool, shouldRetry, retryDelay
 
 -}
 
@@ -25,6 +25,17 @@ type Decision
     = Stop
     | Retry
     | RetryAfter Float
+
+
+{-| Converts `True` to `Retry` and `False` to `Stop`.
+-}
+fromBool : Bool -> Decision
+fromBool retryable =
+    if retryable then
+        Retry
+
+    else
+        Stop
 
 
 {-| Whether the decision requests a retry, independent of policy limits.

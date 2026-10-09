@@ -15,7 +15,12 @@ import Test exposing (Test, describe, test)
 tests : Test
 tests =
     describe "Again.Decision"
-        [ test "only Stop rejects a retry regardless of its delay" <|
+        [ test "boolean predicates select Retry or Stop" <|
+            \_ ->
+                [ True, False ]
+                    |> List.map Decision.fromBool
+                    |> Expect.equal [ Retry, Stop ]
+        , test "only Stop rejects a retry regardless of its delay" <|
             \_ ->
                 [ Stop, Retry, RetryAfter 0, RetryAfter 5000 ]
                     |> List.map Decision.shouldRetry

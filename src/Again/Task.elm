@@ -56,7 +56,7 @@ Retry a GET up to three total attempts on timeouts or network errors:
 
 -}
 
-import Again.Decision as Decision exposing (Decision(..))
+import Again.Decision as Decision exposing (Decision)
 import Again.Policy exposing (Policy)
 import Process
 import Task exposing (Task)
@@ -77,14 +77,7 @@ For HTTP tasks, [Again.Http.isRetryable](Again-Http#isRetryable) supplies a defa
 -}
 retryIf : (error -> Bool) -> Policy -> Task error value -> Task error value
 retryIf retryable =
-    retryWith
-        (\error ->
-            if retryable error then
-                Retry
-
-            else
-                Stop
-        )
+    retryWith (retryable >> Decision.fromBool)
 
 
 {-| Classifies each error with a [Decision](Again-Decision#Decision).
