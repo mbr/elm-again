@@ -6,6 +6,29 @@ module Again.Remote exposing
 
 {-| Keep track of a remote value and retry it when things go wrong.
 
+Create a `Remote` with a retry policy, then report each outcome with `fail` or
+`succeed`:
+
+    import Again.Policy as Policy
+    import Again.Remote as Remote
+    import Again.Schedule exposing (Schedule(..))
+
+    initial =
+        Remote.init (Policy.unlimited (Periodic { delay = 1000 }))
+
+    failure =
+        Remote.fail "timeout" initial
+
+    retrying =
+        Remote.beginRetry (Tuple.first failure)
+
+    ready =
+        Remote.succeed "hello" retrying
+
+The second value in `failure` is `Just 1000`. Wait that many milliseconds before
+calling `beginRetry` and trying again. After success, `Remote.get ready` gives
+you `Just "hello"`.
+
 A successful value can fail later. For example, a connection may close after it
 has opened.
 
