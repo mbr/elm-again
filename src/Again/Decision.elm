@@ -1,6 +1,6 @@
 module Again.Decision exposing (Decision(..), fromBool, shouldRetry, retryDelay)
 
-{-| Decide whether to retry a failure, optionally requesting a minimum wait.
+{-| Describe whether to retry an action and an optional minimum wait.
 
 @docs Decision, fromBool, shouldRetry, retryDelay
 
@@ -11,12 +11,12 @@ import Again.Policy as Policy exposing (Policy)
 
 {-| Describes a decision made to retry an action.
 
-`Stop` returns the error.
+`Stop` requests no further attempt.
 
-`Retry` uses an unspecified delay.
+`Retry` requests another attempt with an unspecified delay.
 
-`RetryAfter` waits at least the given number of milliseconds, using a finite,
-nonnegative value.
+`RetryAfter` requests another attempt after at least the given number of
+milliseconds. The delay must be finite and nonnegative.
 
 -}
 type Decision
@@ -36,7 +36,7 @@ fromBool retryable =
         Stop
 
 
-{-| Whether the decision requests a retry, independent of policy limits.
+{-| Whether the decision requests another attempt.
 -}
 shouldRetry : Decision -> Bool
 shouldRetry decision =
@@ -51,8 +51,8 @@ shouldRetry decision =
             True
 
 
-{-| Applies the decision to the policy's next delay. Count attempts already made,
-starting at one. Returns `Nothing` when stopped or exhausted.
+{-| Calculates the next delay in milliseconds. Count attempts already made,
+starting at one. Returns `Nothing` when another attempt is not permitted.
 -}
 retryDelay : Decision -> Policy -> Int -> Maybe Float
 retryDelay decision policy attempts =
