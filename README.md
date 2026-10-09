@@ -1,25 +1,60 @@
 # elm-again
 
-Retry schedules and attempt limits, with optional task helpers.
+Retries for tasks and manually managed values, support exponential backoff.
+
+## `Again.Task`
+
+Retry an existing task up to three times, waiting a second between attempts:
 
 ```elm
 import Again.Policy as Policy
-import Again.Schedule as Schedule exposing (Schedule(..))
+import Again.Schedule exposing (Schedule(..))
+import Again.Task
+import Task exposing (Task)
 
-policy =
-    { schedule = Periodic { delay = 1000 }
-    , limit = Policy.MaxAttempts 3
-    }
-
-firstRetryDelay =
-    Schedule.delay policy.schedule 0
+run : Task error value -> Cmd (Result error value)
+run task =
+    task
+        |> Again.Task.retry
+            { schedule = Periodic { delay = 1000 }
+            , limit = Policy.MaxAttempts 3
+            }
+        |> Task.attempt identity
 ```
 
-`Schedule.delay` takes a zero-based retry index and returns milliseconds as a `Float`.
-`Policy.init` allows unlimited retries. `MaxAttempts` includes the initial operation.
+## `Again.Remote`
 
-Use `Again.Task.retry policy task` to retry any failure, or `Again.Task.retryIf isTransient policy task` to choose which errors to retry. Both return a task that succeeds with the result or fails with the last error.
+Track attempts yourself, using the returned delay to schedule the next command:
 
-Use `Again.Remote` to track a value's retry lifecycle while managing commands and callbacks yourself.
+```elm
+import Again.Policy as Policy
+import Again.Remote as Remote
+import Again.Schedule exposing (Schedule(..))
 
-Develop with `nix develop`, then `./format.sh` and `./check.sh`. `nix build` runs the same checks in a sandbox. Refresh pinned Elm dependencies with `./update-deps.sh`.
+attempting =
+    Remote.init
+        { schedule = Periodic { delay = 1000 }
+        , limit = Policy.MaxAttempts 3
+        }
+        |> Remote.started
+
+failure =
+    Remote.failed "Offline" attempting
+```
+
+`failure` contains the waiting state and a delay of `Just 1000`. When the retry runs and succeeds:
+
+```elm
+retrying =
+    failure |> Tuple.first |> Remote.started
+
+ready =
+    Remote.ok "Hello" retrying
+
+value =
+    Remote.get ready
+```
+
+`value` is `Just "Hello"`. Starting another attempt or reporting a failure drops it.
+
+Develop with `nix develop`, then `./format.sh` and `./check.sh`. `nix build` runs the checks in a sandbox.
