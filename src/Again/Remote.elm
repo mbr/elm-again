@@ -61,25 +61,32 @@ state (Remote _ _ current) =
     current
 
 
-{-| Returns the state constructor's name.
+{-| Describes the state with its current or upcoming attempt number.
 -}
 stateToString : State error value -> String
 stateToString current =
     case current of
         Attempting ->
-            "Attempting"
+            "attempting" ++ attemptLabel 1
 
-        WaitingForRetry _ ->
-            "WaitingForRetry"
+        WaitingForRetry context ->
+            "waiting to retry" ++ attemptLabel (context.attempts + 1)
 
-        Retrying _ ->
-            "Retrying"
+        Retrying context ->
+            "retrying" ++ attemptLabel (context.attempts + 1)
 
         Successful _ ->
-            "Successful"
+            "successful"
 
         Failed _ ->
-            "Failed"
+            "failed"
+
+
+{-| Formats an attempt number.
+-}
+attemptLabel : Int -> String
+attemptLabel attempt =
+    " (attempt " ++ String.fromInt attempt ++ ")"
 
 
 {-| Returns the success or terminal error, or `Nothing` while pending.
