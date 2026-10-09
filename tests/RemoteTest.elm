@@ -29,9 +29,6 @@ tests =
         [ test "success after retries can be lost and recovered without retaining the old value" <|
             \_ ->
                 let
-                    initial =
-                        Remote.idle policy
-
                     connecting =
                         Remote.attempting policy
 
@@ -39,13 +36,13 @@ tests =
                         Remote.failed "timeout" connecting
 
                     retrying =
-                        Remote.started waiting
+                        Remote.retry waiting |> Tuple.first
 
                     ( waitingAgain, secondDelay ) =
                         Remote.failed "refused" retrying
 
                     connected =
-                        waitingAgain |> Remote.started |> Remote.ok "socket"
+                        waitingAgain |> Remote.retry |> Tuple.first |> Remote.ok "socket"
 
                     ( lost, resetDelay ) =
                         Remote.failed "closed" connected
@@ -54,14 +51,13 @@ tests =
                         Remote.ok "replacement" lost
 
                     states =
-                        [ initial, connecting, waiting, retrying, waitingAgain, connected, lost, recovered ]
+                        [ connecting, waiting, retrying, waitingAgain, connected, lost, recovered ]
                 in
                 Expect.all
                     [ \_ ->
                         List.map Remote.state states
                             |> Expect.equal
-                                [ Idle
-                                , Attempting
+                                [ Attempting
                                 , WaitingForRetry { attempts = 1, lastError = "timeout" }
                                 , Retrying { attempts = 1, lastError = "timeout" }
                                 , WaitingForRetry { attempts = 2, lastError = "refused" }
@@ -72,14 +68,14 @@ tests =
                     , \_ -> Expect.equal [ Just 1000, Just 2000, Just 1000 ] [ firstDelay, secondDelay, resetDelay ]
                     , \_ ->
                         List.map Remote.result states
-                            |> Expect.equal [ Nothing, Nothing, Nothing, Nothing, Nothing, Just (Ok "socket"), Nothing, Just (Ok "replacement") ]
+                            |> Expect.equal [ Nothing, Nothing, Nothing, Nothing, Just (Ok "socket"), Nothing, Just (Ok "replacement") ]
                     , \_ ->
                         List.map Remote.get states
-                            |> Expect.equal [ Nothing, Nothing, Nothing, Nothing, Nothing, Just "socket", Nothing, Just "replacement" ]
+                            |> Expect.equal [ Nothing, Nothing, Nothing, Nothing, Just "socket", Nothing, Just "replacement" ]
                     ]
                     ()
-        , fuzz (Fuzz.pair (Fuzz.intRange -2 12) Fuzz.bool) "reported failures count toward limits with or without start notifications" <|
-            \( limit, reportStarts ) ->
+        , fuzz (Fuzz.pair (Fuzz.intRange -2 12) Fuzz.bool) "reported failures count toward limits with or without retry transitions" <|
+            \( limit, reportRetries ) ->
                 let
                     attempts =
                         max 1 limit
@@ -91,8 +87,8 @@ tests =
                                     let
                                         ( next, delay ) =
                                             current
-                                                |> (if reportStarts then
-                                                        Remote.started
+                                                |> (if reportRetries then
+                                                        Remote.retry >> Tuple.first
 
                                                     else
                                                         identity
@@ -101,7 +97,7 @@ tests =
                                     in
                                     ( next, previousDelays ++ [ delay ] )
                                 )
-                                ( Remote.idle { schedule = Periodic { delay = 1000 }, limit = Policy.MaxAttempts limit }, [] )
+                                ( Remote.attempting { schedule = Periodic { delay = 1000 }, limit = Policy.MaxAttempts limit }, [] )
                 in
                 Expect.all
                     [ \_ -> Expect.equal (List.repeat (attempts - 1) (Just 1000) ++ [ Nothing ]) delays
@@ -110,66 +106,51 @@ tests =
                     , \_ -> Expect.equal Nothing (Remote.get exhausted)
                     ]
                     ()
-        , test "starts, stops, and outcomes apply from every state, preserving only active retry context" <|
+        , test "retries require a waiting state while outcomes can be recorded from any state" <|
             \_ ->
                 let
-                    initial =
-                        Remote.idle policy
-
                     attempting =
-                        Remote.started initial
+                        Remote.attempting policy
 
                     waiting =
                         Remote.failed "timeout" attempting |> Tuple.first
 
                     retrying =
-                        Remote.started waiting
+                        Remote.retry waiting |> Tuple.first
 
                     successful =
                         Remote.ok "socket" retrying
 
-                    stopped =
+                    rejected =
                         Remote.failedWith Stop "denied" attempting |> Tuple.first
 
                     exhausted =
                         retrying
                             |> Remote.failed "refused"
                             |> Tuple.first
-                            |> Remote.started
+                            |> Remote.retry
+                            |> Tuple.first
                             |> Remote.failed "unavailable"
                             |> Tuple.first
 
                     allStates =
-                        [ initial, attempting, waiting, retrying, successful, stopped, exhausted ]
+                        [ attempting, waiting, retrying, successful, rejected, exhausted ]
                 in
                 Expect.all
                     [ \_ ->
-                        List.map (Remote.started >> Remote.state) allStates
-                            |> Expect.equal
-                                [ Attempting
-                                , Attempting
-                                , Retrying { attempts = 1, lastError = "timeout" }
-                                , Retrying { attempts = 1, lastError = "timeout" }
-                                , Attempting
-                                , Attempting
-                                , Attempting
-                                ]
-                    , \_ ->
                         List.map Remote.retry allStates
                             |> Expect.equal
-                                [ ( initial, False )
-                                , ( attempting, False )
+                                [ ( attempting, False )
                                 , ( retrying, True )
                                 , ( retrying, False )
                                 , ( successful, False )
-                                , ( stopped, False )
+                                , ( rejected, False )
                                 , ( exhausted, False )
                                 ]
                     , \_ ->
                         List.map (Remote.failed "new failure" >> Tuple.mapFirst Remote.state) allStates
                             |> Expect.equal
                                 [ ( WaitingForRetry { attempts = 1, lastError = "new failure" }, Just 1000 )
-                                , ( WaitingForRetry { attempts = 1, lastError = "new failure" }, Just 1000 )
                                 , ( WaitingForRetry { attempts = 2, lastError = "new failure" }, Just 2000 )
                                 , ( WaitingForRetry { attempts = 2, lastError = "new failure" }, Just 2000 )
                                 , ( WaitingForRetry { attempts = 1, lastError = "new failure" }, Just 1000 )
@@ -178,16 +159,10 @@ tests =
                                 ]
                     , \_ ->
                         List.map (Remote.failedWith Stop "denied again" >> Tuple.mapFirst Remote.state) allStates
-                            |> Expect.equal (List.repeat 7 ( Failed "denied again", Nothing ))
-                    , \_ ->
-                        List.map Remote.stopped allStates
-                            |> Expect.equal (List.repeat 7 initial)
-                    , \_ ->
-                        List.map (Remote.stopped >> Remote.started >> Remote.failed "restarted" >> Tuple.mapFirst Remote.state) allStates
-                            |> Expect.equal (List.repeat 7 ( WaitingForRetry { attempts = 1, lastError = "restarted" }, Just 1000 ))
+                            |> Expect.equal (List.repeat 6 ( Failed "denied again", Nothing ))
                     , \_ ->
                         List.map (Remote.ok "replacement") allStates
-                            |> Expect.equal (List.repeat 7 (Remote.idle policy |> Remote.ok "replacement"))
+                            |> Expect.equal (List.repeat 6 (Remote.attempting policy |> Remote.ok "replacement"))
                     ]
                     ()
         , test "scheduled failures return updated state for retries and terminal errors" <|
@@ -225,10 +200,10 @@ tests =
                         Remote.failedWith (RetryAfter 1500) "busy" attempting
 
                     ( waitingAgain, secondDelay ) =
-                        waiting |> Remote.started |> Remote.failedWith (RetryAfter 10) "still busy"
+                        waiting |> Remote.retry |> Tuple.first |> Remote.failedWith (RetryAfter 10) "still busy"
 
                     exhausted =
-                        waitingAgain |> Remote.started |> Remote.failedWith (RetryAfter 5000) "unavailable"
+                        waitingAgain |> Remote.retry |> Tuple.first |> Remote.failedWith (RetryAfter 5000) "unavailable"
 
                     stopped =
                         Remote.failedWith Stop "denied" attempting

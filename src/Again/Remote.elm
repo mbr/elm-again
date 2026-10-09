@@ -1,16 +1,17 @@
 module Again.Remote exposing
     ( Remote, State(..), RetryContext
-    , idle, attempting, state, result, get
-    , started, retry, stopped, ok, failed, failedWith, failedAndSchedule
+    , attempting, state, result, get
+    , retry, ok, failed, failedWith, failedAndSchedule
     )
 
-{-| Track a value that can succeed, fail, and be retried.
+{-| Track an operation's value and retries, beginning with its initial attempt.
 
-The caller runs attempts and filters obsolete callbacks.
+The caller runs attempts and filters obsolete callbacks. Discard the remote to
+abandon tracking; this does not cancel pending effects.
 
 @docs Remote, State, RetryContext
-@docs idle, attempting, state, result, get
-@docs started, retry, stopped, ok, failed, failedWith, failedAndSchedule
+@docs attempting, state, result, get
+@docs retry, ok, failed, failedWith, failedAndSchedule
 
 -}
 
@@ -28,8 +29,6 @@ type Remote error value
 
 {-| The current state of the value.
 
-`Idle` means no attempt is active or scheduled.
-
 `Attempting` is the first attempt in flight.
 
 `WaitingForRetry` is waiting before another attempt.
@@ -42,8 +41,7 @@ type Remote error value
 
 -}
 type State error value
-    = Idle
-    | Attempting
+    = Attempting
     | WaitingForRetry (RetryContext error)
     | Retrying (RetryContext error)
     | Successful value
@@ -61,13 +59,6 @@ type alias RetryContext error =
     { attempts : Int
     , lastError : error
     }
-
-
-{-| Creates a value in `Idle` state.
--}
-idle : Policy -> Remote error value
-idle policy =
-    Remote policy Idle
 
 
 {-| Creates a value in `Attempting` state.
@@ -109,24 +100,6 @@ get =
     result >> Maybe.andThen Result.toMaybe
 
 
-{-| Records that a new attempt has begun.
-
-Preserves context when waiting or retrying; all other states begin a fresh attempt.
-
--}
-started : Remote error value -> Remote error value
-started (Remote policy current) =
-    case current of
-        WaitingForRetry context ->
-            Remote policy (Retrying context)
-
-        Retrying context ->
-            Remote policy (Retrying context)
-
-        _ ->
-            Remote policy Attempting
-
-
 {-| Marks a pending retry as running.
 
 Returns `True` when moving from `WaitingForRetry` to `Retrying`.
@@ -141,16 +114,6 @@ retry ((Remote policy current) as remote) =
 
         _ ->
             ( remote, False )
-
-
-{-| Records that attempts have stopped.
-
-Returns to `Idle`, keeping the policy but discarding any value, error, and attempt count.
-
--}
-stopped : Remote error value -> Remote error value
-stopped (Remote policy _) =
-    idle policy
 
 
 {-| Records success.

@@ -24,7 +24,7 @@ run task =
 
 ## `Again.Remote`
 
-Use this when each attempt needs to update your model, rather than waiting for a task's final result.
+Use this when each attempt needs to update your model, rather than waiting for a task's final result. Creating a `Remote` records the initial attempt; the caller runs it. Discarding it abandons tracking without cancelling pending work.
 
 Suppose you've submitted a job. Its status endpoint returns `202 Accepted` with progress text while running, `200 OK` with the result when complete, or an error such as `404`. Poll the status endpoint without submitting the job again:
 
