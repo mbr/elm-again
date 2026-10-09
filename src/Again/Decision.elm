@@ -18,8 +18,6 @@ import Again.Policy as Policy exposing (Policy)
 `RetryAfter` waits at least the given number of milliseconds, using a finite,
 nonnegative value.
 
-Both retry decisions remain subject to the policy's attempt limit.
-
 -}
 type Decision
     = Stop
