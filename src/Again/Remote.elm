@@ -1,6 +1,6 @@
 module Again.Remote exposing
     ( Remote, State(..), RetryContext
-    , attempting, state, result, get
+    , init, state, result, get
     , retry, ok, failed, failedWith, failedAndSchedule
     )
 
@@ -10,7 +10,7 @@ The caller runs attempts and filters obsolete callbacks. Discard the remote to
 abandon tracking; this does not cancel pending effects.
 
 @docs Remote, State, RetryContext
-@docs attempting, state, result, get
+@docs init, state, result, get
 @docs retry, ok, failed, failedWith, failedAndSchedule
 
 -}
@@ -61,10 +61,10 @@ type alias RetryContext error =
     }
 
 
-{-| Creates a value in `Attempting` state.
+{-| Creates a remote value with its initial attempt in flight.
 -}
-attempting : Policy -> Remote error value
-attempting policy =
+init : Policy -> Remote error value
+init policy =
     Remote policy Attempting
 
 

@@ -48,7 +48,7 @@ type Msg
 
 init : ( Model, Cmd Msg )
 init =
-    ( Remote.attempting (Policy.unlimited (Periodic { delay = 1000 }))
+    ( Remote.init (Policy.unlimited (Periodic { delay = 1000 }))
     , poll
     )
 

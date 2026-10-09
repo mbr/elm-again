@@ -30,7 +30,7 @@ tests =
             \_ ->
                 let
                     connecting =
-                        Remote.attempting policy
+                        Remote.init policy
 
                     ( waiting, firstDelay ) =
                         Remote.failed "timeout" connecting
@@ -97,7 +97,7 @@ tests =
                                     in
                                     ( next, previousDelays ++ [ delay ] )
                                 )
-                                ( Remote.attempting { schedule = Periodic { delay = 1000 }, limit = Policy.MaxAttempts limit }, [] )
+                                ( Remote.init { schedule = Periodic { delay = 1000 }, limit = Policy.MaxAttempts limit }, [] )
                 in
                 Expect.all
                     [ \_ -> Expect.equal (List.repeat (attempts - 1) (Just 1000) ++ [ Nothing ]) delays
@@ -110,7 +110,7 @@ tests =
             \_ ->
                 let
                     attempting =
-                        Remote.attempting policy
+                        Remote.init policy
 
                     waiting =
                         Remote.failed "timeout" attempting |> Tuple.first
@@ -162,20 +162,20 @@ tests =
                             |> Expect.equal (List.repeat 6 ( Failed "denied again", Nothing ))
                     , \_ ->
                         List.map (Remote.ok "replacement") allStates
-                            |> Expect.equal (List.repeat 6 (Remote.attempting policy |> Remote.ok "replacement"))
+                            |> Expect.equal (List.repeat 6 (Remote.init policy |> Remote.ok "replacement"))
                     ]
                     ()
         , test "scheduled failures return updated state for retries and terminal errors" <|
             \_ ->
                 let
                     attempting =
-                        Remote.attempting policy
+                        Remote.init policy
 
                     waiting =
                         Remote.failed "first failure" attempting |> Tuple.first
 
                     lastAttempt =
-                        Remote.attempting { policy | limit = Policy.MaxAttempts 1 }
+                        Remote.init { policy | limit = Policy.MaxAttempts 1 }
                 in
                 [ ( Retry, attempting ), ( Stop, attempting ), ( RetryAfter 1500, waiting ), ( Retry, lastAttempt ) ]
                     |> List.map
@@ -194,7 +194,7 @@ tests =
             \_ ->
                 let
                     attempting =
-                        Remote.attempting policy
+                        Remote.init policy
 
                     ( waiting, firstDelay ) =
                         Remote.failedWith (RetryAfter 1500) "busy" attempting
