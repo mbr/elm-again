@@ -13,7 +13,7 @@ import Again.Policy as Policy exposing (Policy)
 
 `Stop` returns the error.
 
-`Retry` uses the policy's delay.
+`Retry` uses an unspecified delay.
 
 `RetryAfter` waits at least the given number of milliseconds, using a finite,
 nonnegative value.
