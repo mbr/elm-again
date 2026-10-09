@@ -1,6 +1,6 @@
 module Again.Remote exposing
     ( Remote, State(..), RetryContext
-    , init, state, result, get
+    , notAttempted, attempting, state, result, get
     , started, ok, failed, failedWith
     )
 
@@ -9,7 +9,7 @@ module Again.Remote exposing
 The caller runs attempts, schedules retries, and filters obsolete callbacks.
 
 @docs Remote, State, RetryContext
-@docs init, state, result, get
+@docs notAttempted, attempting, state, result, get
 @docs started, ok, failed, failedWith
 
 -}
@@ -63,9 +63,16 @@ type alias RetryContext error =
 
 {-| Creates a value in `NotAttempted` state.
 -}
-init : Policy -> Remote error value
-init policy =
+notAttempted : Policy -> Remote error value
+notAttempted policy =
     Remote policy NotAttempted
+
+
+{-| Creates a value in `Attempting` state.
+-}
+attempting : Policy -> Remote error value
+attempting policy =
+    Remote policy Attempting
 
 
 {-| Inspects the current state.

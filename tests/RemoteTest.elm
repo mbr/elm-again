@@ -30,10 +30,10 @@ tests =
             \_ ->
                 let
                     initial =
-                        Remote.init policy
+                        Remote.notAttempted policy
 
                     connecting =
-                        Remote.started initial
+                        Remote.attempting policy
 
                     ( waiting, firstDelay ) =
                         Remote.failed "timeout" connecting
@@ -101,7 +101,7 @@ tests =
                                     in
                                     ( next, previousDelays ++ [ delay ] )
                                 )
-                                ( Remote.init { schedule = Periodic { delay = 1000 }, limit = Policy.MaxAttempts limit }, [] )
+                                ( Remote.notAttempted { schedule = Periodic { delay = 1000 }, limit = Policy.MaxAttempts limit }, [] )
                 in
                 Expect.all
                     [ \_ -> Expect.equal (List.repeat (attempts - 1) (Just 1000) ++ [ Nothing ]) delays
@@ -114,7 +114,7 @@ tests =
             \_ ->
                 let
                     initial =
-                        Remote.init policy
+                        Remote.notAttempted policy
 
                     attempting =
                         Remote.started initial
@@ -170,14 +170,14 @@ tests =
                             |> Expect.equal (List.repeat 7 ( Failed "denied again", Nothing ))
                     , \_ ->
                         List.map (Remote.ok "replacement") allStates
-                            |> Expect.equal (List.repeat 7 (Remote.init policy |> Remote.ok "replacement"))
+                            |> Expect.equal (List.repeat 7 (Remote.notAttempted policy |> Remote.ok "replacement"))
                     ]
                     ()
         , test "decisions can stop or extend a wait but cannot exceed the attempt limit" <|
             \_ ->
                 let
                     attempting =
-                        Remote.init policy |> Remote.started
+                        Remote.attempting policy
 
                     ( waiting, firstDelay ) =
                         Remote.failedWith (RetryAfter 1500) "busy" attempting
