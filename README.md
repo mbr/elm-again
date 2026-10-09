@@ -58,7 +58,7 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         Received (Ok output) ->
-            ( Remote.ok output model, Cmd.none )
+            ( Remote.succeed output model, Cmd.none )
 
         Received (Err error) ->
             failedAndSchedule (decide error) PollAgain error model
@@ -66,7 +66,7 @@ update msg model =
         PollAgain ->
             let
                 ( next, shouldRetry ) =
-                    Remote.retry model
+                    Remote.beginRetry model
             in
             ( next
             , if shouldRetry then
@@ -80,7 +80,7 @@ update msg model =
 -}
 failedAndSchedule : Decision.Decision -> msg -> error -> Remote.Remote error value -> ( Remote.Remote error value, Cmd msg )
 failedAndSchedule decision wakeup error remote =
-    Remote.failedWith decision error remote
+    Remote.failWith decision error remote
         |> Tuple.mapSecond (wakeAfter wakeup)
 
 {-| Schedules a message when a retry delay is present.

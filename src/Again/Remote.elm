@@ -1,14 +1,14 @@
 module Again.Remote exposing
     ( Remote, State(..), RetryContext
     , init, state, stateToString, result, get
-    , retry, ok, failed, failedWith
+    , beginRetry, succeed, fail, failWith
     )
 
 {-| Retry-aware state for a remote value.
 
 @docs Remote, State, RetryContext
 @docs init, state, stateToString, result, get
-@docs retry, ok, failed, failedWith
+@docs beginRetry, succeed, fail, failWith
 
 -}
 
@@ -100,8 +100,8 @@ get =
 {-| Moves `WaitingForRetry` to `Retrying`, returning `True` if changed.
 Other states return unchanged with `False`.
 -}
-retry : Remote error value -> ( Remote error value, Bool )
-retry ((Remote policy current) as remote) =
+beginRetry : Remote error value -> ( Remote error value, Bool )
+beginRetry ((Remote policy current) as remote) =
     case current of
         WaitingForRetry context ->
             ( Remote policy (Retrying context), True )
@@ -112,39 +112,39 @@ retry ((Remote policy current) as remote) =
 
 {-| Stores a successful value and clears the retry context.
 -}
-ok : value -> Remote error value -> Remote error value
-ok value (Remote policy _) =
+succeed : value -> Remote error value -> Remote error value
+succeed value (Remote policy _) =
     Remote policy (Successful value)
 
 
 {-| Records a failure with `Decision.Retry`. Returns a delay in milliseconds,
 or `Nothing` if the attempt limit is reached.
 -}
-failed : error -> Remote error value -> ( Remote error value, Maybe Float )
-failed =
-    failedWith Decision.Retry
+fail : error -> Remote error value -> ( Remote error value, Maybe Float )
+fail =
+    failWith Decision.Retry
 
 
 {-| Records a failure using the decision and policy. Returns a retry delay in
 milliseconds, or `Nothing` if no retry is allowed.
 -}
-failedWith : Decision -> error -> Remote error value -> ( Remote error value, Maybe Float )
-failedWith decision error (Remote policy current) =
+failWith : Decision -> error -> Remote error value -> ( Remote error value, Maybe Float )
+failWith decision error (Remote policy current) =
     case current of
         WaitingForRetry context ->
-            recordFailure decision error (context.attempts + 1) policy
+            failureOutcome decision error (context.attempts + 1) policy
 
         Retrying context ->
-            recordFailure decision error (context.attempts + 1) policy
+            failureOutcome decision error (context.attempts + 1) policy
 
         _ ->
-            recordFailure decision error 1 policy
+            failureOutcome decision error 1 policy
 
 
 {-| Builds the next state and retry delay.
 -}
-recordFailure : Decision -> error -> Int -> Policy -> ( Remote error value, Maybe Float )
-recordFailure decision error attempts policy =
+failureOutcome : Decision -> error -> Int -> Policy -> ( Remote error value, Maybe Float )
+failureOutcome decision error attempts policy =
     let
         delay =
             Decision.retryDelay decision policy attempts
