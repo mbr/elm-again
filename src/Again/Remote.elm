@@ -1,14 +1,14 @@
 module Again.Remote exposing
     ( Remote, State(..), RetryContext
     , init, withRetryable, state, stateToString, result, get
-    , beginRetry, succeed, fail, failWith
+    , beginRetry, succeed, fail
     )
 
 {-| Retry-aware state for a remote value.
 
 @docs Remote, State, RetryContext
 @docs init, withRetryable, state, stateToString, result, get
-@docs beginRetry, succeed, fail, failWith
+@docs beginRetry, succeed, fail
 
 -}
 
@@ -128,15 +128,7 @@ succeed value (Remote policy classify _) =
 or `Nothing` if no retry is allowed.
 -}
 fail : error -> Remote error value -> ( Remote error value, Maybe Float )
-fail error ((Remote _ classify _) as remote) =
-    failWith classify error remote
-
-
-{-| Uses the supplied classifier for this failure only. Returns a retry delay in
-milliseconds, or `Nothing` if no retry is allowed.
--}
-failWith : (error -> Decision) -> error -> Remote error value -> ( Remote error value, Maybe Float )
-failWith decide error (Remote policy classify current) =
+fail error (Remote policy classify current) =
     let
         attempts =
             case current of
@@ -149,7 +141,7 @@ failWith decide error (Remote policy classify current) =
                 _ ->
                     1
     in
-    failureOutcome (decide error) error attempts policy
+    failureOutcome (classify error) error attempts policy
         |> Tuple.mapFirst (Remote policy classify)
 
 

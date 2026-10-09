@@ -131,7 +131,7 @@ tests =
                         Remote.succeed "socket" retrying
 
                     rejected =
-                        Remote.failWith (always Stop) "denied" attempting |> Tuple.first
+                        attempting |> Remote.withRetryable (always Stop) |> Remote.fail "denied" |> Tuple.first
 
                     exhausted =
                         retrying
@@ -163,18 +163,18 @@ tests =
                                 , ( WaitingForRetry { attempts = 2, lastError = "new failure" }, Just 2000 )
                                 , ( WaitingForRetry { attempts = 2, lastError = "new failure" }, Just 2000 )
                                 , ( WaitingForRetry { attempts = 1, lastError = "new failure" }, Just 1000 )
-                                , ( WaitingForRetry { attempts = 1, lastError = "new failure" }, Just 1000 )
+                                , ( Failed "new failure", Nothing )
                                 , ( WaitingForRetry { attempts = 1, lastError = "new failure" }, Just 1000 )
                                 ]
                     , \_ ->
-                        List.map (Remote.failWith (always Stop) "denied again" >> Tuple.mapFirst Remote.state) allStates
+                        List.map (Remote.withRetryable (always Stop) >> Remote.fail "denied again" >> Tuple.mapFirst Remote.state) allStates
                             |> Expect.equal (List.repeat 6 ( Failed "denied again", Nothing ))
                     , \_ ->
                         List.map (Remote.succeed "replacement" >> Remote.state) allStates
                             |> Expect.equal (List.repeat 6 (Successful "replacement"))
                     ]
                     ()
-        , test "stored classifiers survive transitions, allow per-call overrides, and can be replaced without resetting state" <|
+        , test "stored classifiers survive transitions and can be replaced without resetting state" <|
             \_ ->
                 let
                     classify error =
@@ -196,11 +196,8 @@ tests =
                     ( exhausted, finalDelay ) =
                         waitingAgain |> Remote.beginRetry |> Tuple.first |> Remote.fail "busy"
 
-                    ( overridden, overrideDelay ) =
-                        waiting |> Remote.beginRetry |> Tuple.first |> Remote.failWith (always Retry) "denied"
-
                     afterSuccess =
-                        overridden |> Remote.succeed "value" |> Remote.fail "denied"
+                        waitingAgain |> Remote.succeed "value" |> Remote.fail "denied"
 
                     afterFailure =
                         Remote.fail "busy" exhausted
@@ -211,7 +208,6 @@ tests =
                 Expect.all
                     [ \_ -> Expect.equal [ Just 5000, Just 5000, Nothing ] [ firstDelay, secondDelay, finalDelay ]
                     , \_ -> Expect.equal (Failed "busy") (Remote.state exhausted)
-                    , \_ -> Expect.equal ( WaitingForRetry { attempts = 2, lastError = "denied" }, Just 2000 ) ( Remote.state overridden, overrideDelay )
                     , \_ -> Expect.equal ( Failed "denied", Nothing ) (Tuple.mapFirst Remote.state afterSuccess)
                     , \_ -> Expect.equal ( WaitingForRetry { attempts = 1, lastError = "busy" }, Just 5000 ) (Tuple.mapFirst Remote.state afterFailure)
                     , \_ -> Expect.equal (Remote.state waiting) (Remote.state replaced)
@@ -239,19 +235,19 @@ tests =
                                 Stop
 
                     attempting =
-                        Remote.init policy
+                        Remote.init policy |> Remote.withRetryable decide
 
                     ( waiting, firstDelay ) =
-                        Remote.failWith decide "busy" attempting
+                        Remote.fail "busy" attempting
 
                     ( waitingAgain, secondDelay ) =
-                        waiting |> Remote.beginRetry |> Tuple.first |> Remote.failWith decide "still busy"
+                        waiting |> Remote.beginRetry |> Tuple.first |> Remote.fail "still busy"
 
                     exhausted =
-                        waitingAgain |> Remote.beginRetry |> Tuple.first |> Remote.failWith decide "unavailable"
+                        waitingAgain |> Remote.beginRetry |> Tuple.first |> Remote.fail "unavailable"
 
                     stopped =
-                        Remote.failWith decide "denied" attempting
+                        Remote.fail "denied" attempting
                 in
                 [ ( waiting, firstDelay ), ( waitingAgain, secondDelay ), exhausted, stopped ]
                     |> List.map (Tuple.mapFirst Remote.state)
