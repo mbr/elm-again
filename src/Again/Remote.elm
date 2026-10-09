@@ -18,7 +18,7 @@ import Again.Decision as Decision exposing (Decision)
 import Again.Policy exposing (Policy)
 
 
-{-| A retry policy and the current state of a value.
+{-| A value with retry state.
 -}
 type Remote error value
     = Remote Policy (State error value)
@@ -128,9 +128,11 @@ ok value (Remote policy _) =
     Remote policy (Successful value)
 
 
-{-| Records a failure.
+{-| Records a failure and requests a retry.
 
-Returns the policy's retry delay in milliseconds, or `Nothing` when no retry is allowed.
+Use `failedWith` when some errors should not be retried.
+
+Returns the retry delay in milliseconds, or `Nothing` when exhausted.
 
 -}
 failed : error -> Remote error value -> ( Remote error value, Maybe Float )
@@ -138,11 +140,11 @@ failed =
     failedWith Decision.Retry
 
 
-{-| Records a failure with a retry decision.
+{-| Records a failure using your decision about whether to retry the error.
 
 Advances existing retry counts; otherwise starts at one.
 
-Returns a delay in milliseconds, or `Nothing` when no retry is allowed.
+Returns a delay in milliseconds, or `Nothing` when retrying is stopped or exhausted.
 
 -}
 failedWith : Decision -> error -> Remote error value -> ( Remote error value, Maybe Float )
@@ -158,7 +160,7 @@ failedWith decision error (Remote policy current) =
             recordFailure decision error 1 policy
 
 
-{-| Chooses whether to retry or stop.
+{-| Builds the next state and retry delay.
 -}
 recordFailure : Decision -> error -> Int -> Policy -> ( Remote error value, Maybe Float )
 recordFailure decision error attempts policy =
