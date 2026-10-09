@@ -3,7 +3,7 @@
     "name": "mbr/elm-again",
     "summary": "Pure retry schedules and attempt limits",
     "license": "MIT",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "exposed-modules": [
         "Again.Decision",
         "Again.Http",
