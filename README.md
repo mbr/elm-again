@@ -62,16 +62,8 @@ update msg model =
 
         Received (Err error) ->
             let
-                decision =
-                    case error of
-                        NotReady _ ->
-                            Decision.Retry
-
-                        RequestFailed _ ->
-                            Decision.Stop
-
                 ( next, delay ) =
-                    Remote.failedWith decision error model
+                    Remote.failedWith (decide error) error model
             in
             ( next
             , delay
@@ -90,6 +82,15 @@ update msg model =
 
                 _ ->
                     ( model, Cmd.none )
+
+decide : PollError -> Decision.Decision
+decide error =
+    case error of
+        NotReady _ ->
+            Decision.Retry
+
+        RequestFailed _ ->
+            Decision.Stop
 
 poll : Cmd Msg
 poll =
