@@ -5,6 +5,7 @@ schedule controls the waits between subsequent attempts.
 
 Retry a GET up to three total attempts on timeouts or network errors:
 
+    import Again.Http
     import Again.Policy as Policy
     import Again.Schedule exposing (Schedule(..))
     import Again.Task exposing (retryIf)
@@ -21,7 +22,7 @@ Retry a GET up to three total attempts on timeouts or network errors:
             , headers = []
             , url = "/message.txt"
             , body = Http.emptyBody
-            , resolver = Http.stringResolver resolveString
+            , resolver = Http.stringResolver Again.Http.resolve
             , timeout = Just 5000
             }
             |> retryIf isTransient
@@ -33,24 +34,6 @@ Retry a GET up to three total attempts on timeouts or network errors:
     isTransient : Http.Error -> Bool
     isTransient error =
         error == Http.Timeout || error == Http.NetworkError
-
-    resolveString : Http.Response String -> Result Http.Error String
-    resolveString response =
-        case response of
-            Http.GoodStatus_ _ body ->
-                Ok body
-
-            Http.BadUrl_ url ->
-                Err (Http.BadUrl url)
-
-            Http.Timeout_ ->
-                Err Http.Timeout
-
-            Http.NetworkError_ ->
-                Err Http.NetworkError
-
-            Http.BadStatus_ metadata _ ->
-                Err (Http.BadStatus metadata.statusCode)
 
 @docs retry, retryIf, retryWith
 

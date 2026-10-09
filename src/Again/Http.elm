@@ -1,8 +1,8 @@
-module Again.Http exposing (isRetryable)
+module Again.Http exposing (isRetryable, resolve)
 
-{-| Classify HTTP failures for retry policies.
+{-| Helpers for HTTP tasks and retry decisions.
 
-@docs isRetryable
+@docs isRetryable, resolve
 
 -}
 
@@ -33,3 +33,25 @@ isRetryable error =
 
         Http.BadBody _ ->
             False
+
+
+{-| Keep the body of a successful response, or turn a failed response into an
+`Http.Error`. Use with `Http.stringResolver` or `Http.bytesResolver`.
+-}
+resolve : Http.Response body -> Result Http.Error body
+resolve response =
+    case response of
+        Http.GoodStatus_ _ body ->
+            Ok body
+
+        Http.BadUrl_ url ->
+            Err (Http.BadUrl url)
+
+        Http.Timeout_ ->
+            Err Http.Timeout
+
+        Http.NetworkError_ ->
+            Err Http.NetworkError
+
+        Http.BadStatus_ metadata _ ->
+            Err (Http.BadStatus metadata.statusCode)

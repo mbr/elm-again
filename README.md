@@ -24,7 +24,7 @@ loadMessage =
         , headers = []
         , url = "/message.txt"
         , body = Http.emptyBody
-        , resolver = Http.stringResolver resolveString
+        , resolver = Http.stringResolver Again.Http.resolve
         , timeout = Just 5000
         }
         |> Again.Task.retryIf Again.Http.isRetryable
@@ -32,24 +32,6 @@ loadMessage =
             , limit = Policy.MaxAttempts 3
             }
         |> Task.attempt ReceivedMessage
-
-resolveString : Http.Response String -> Result Http.Error String
-resolveString response =
-    case response of
-        Http.GoodStatus_ _ body ->
-            Ok body
-
-        Http.BadUrl_ url ->
-            Err (Http.BadUrl url)
-
-        Http.Timeout_ ->
-            Err Http.Timeout
-
-        Http.NetworkError_ ->
-            Err Http.NetworkError
-
-        Http.BadStatus_ metadata _ ->
-            Err (Http.BadStatus metadata.statusCode)
 ```
 
 ## `Again.Remote`
