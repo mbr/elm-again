@@ -127,6 +127,40 @@ tests =
                             |> Expect.equal [ Nothing, Nothing, Nothing, Nothing, Just "socket", Nothing, Just "replacement" ]
                     ]
                     ()
+        , test "failure after success discards the value and respects the stored classifier and limit" <|
+            \_ ->
+                let
+                    outcomes =
+                        [ ( 1, Retry, "closed" )
+                        , ( 3, Retry, "closed" )
+                        , ( 3, RetryAfter 1500, "busy" )
+                        , ( 3, Stop, "denied" )
+                        ]
+                            |> List.map
+                                (\( limit, decision, error ) ->
+                                    Remote.init { policy | limit = Policy.MaxAttempts limit }
+                                        |> Remote.withRetryable (always decision)
+                                        |> Remote.succeed "socket"
+                                        |> Remote.fail error
+                                )
+                in
+                Expect.all
+                    [ \_ ->
+                        List.map (Tuple.mapFirst Remote.state) outcomes
+                            |> Expect.equal
+                                [ ( Failed "closed", Nothing )
+                                , ( WaitingForRetry { attempts = 1, lastError = "closed" }, Just 1000 )
+                                , ( WaitingForRetry { attempts = 1, lastError = "busy" }, Just 1500 )
+                                , ( Failed "denied", Nothing )
+                                ]
+                    , \_ ->
+                        List.map (Tuple.first >> Remote.get) outcomes
+                            |> Expect.equal (List.repeat 4 Nothing)
+                    , \_ ->
+                        List.map (Tuple.first >> Remote.result) outcomes
+                            |> Expect.equal [ Just (Err "closed"), Nothing, Nothing, Just (Err "denied") ]
+                    ]
+                    ()
         , fuzz (Fuzz.pair (Fuzz.intRange -2 12) Fuzz.bool) "reported failures count toward limits with or without retry transitions" <|
             \( limit, reportRetries ) ->
                 let

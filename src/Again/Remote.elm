@@ -4,7 +4,8 @@ module Again.Remote exposing
     , beginRetry, succeed, fail
     )
 
-{-| Retry-aware state for a remote value.
+{-| Retry-aware state for a remote value. A successful value can later fail and
+be retried, such as a connection that closes.
 
 @docs Remote, State, RetryContext
 @docs init, withRetryable, state, stateToString, result, get
@@ -138,8 +139,9 @@ succeed value (Remote policy classify _) =
     Remote policy classify (Successful value)
 
 
-{-| Uses the stored classifier and policy. Returns a retry delay in milliseconds,
-or `Nothing` if no retry is allowed.
+{-| Records a failure using the stored classifier and policy.
+Failing a `Successful` value discards it and restarts the failure count at one.
+Returns a retry delay in milliseconds, or `Nothing` if no retry is allowed.
 -}
 fail : error -> Remote error value -> ( Remote error value, Maybe Float )
 fail error (Remote policy classify current) =
